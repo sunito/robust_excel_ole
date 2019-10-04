@@ -30,6 +30,80 @@ module RobustExcelOle
       rm_tmp(@dir)
     end
 
+    context "with connect and preserving options" do
+
+      before do
+        @ole_excel = WIN32OLE.new('Excel.Application')        
+      end
+
+      it "should preserve visible false" do
+        @ole_excel.Visible.should be false
+        excel = Excel.current
+        excel.Hwnd.should == @ole_excel.Hwnd
+        excel.Visible.should be false
+      end
+
+      it "should preserve visible true" do
+        @ole_excel.Visible = true
+        @ole_excel.Visible.should be true
+        excel = Excel.current
+        excel.Hwnd.should == @ole_excel.Hwnd
+        excel.Visible.should be true
+      end
+
+      it "should set visible true" do
+        @ole_excel.Visible.should be false
+        excel = Excel.current(:visible => true)
+        excel.Visible.should be true
+      end
+
+      it "should set visible false" do
+        excel = Excel.current(:visible => false)
+        excel.Visible.should be false
+      end
+
+      it "should set visible false, even if it was true before" do
+        @ole_excel.Visible = true
+        @ole_excel.Visible.should be true
+        excel = Excel.current(:visible => false)
+        excel.Visible.should be false
+      end
+
+      it "should preserve displayalerts true" do
+        @ole_excel.DisplayAlerts.should be true
+        excel = Excel.current
+        excel.Hwnd.should == @ole_excel.Hwnd
+        excel.DisplayAlerts.should be true
+      end
+
+      it "should preserve displayalerts false" do
+        @ole_excel.DisplayAlerts = false
+        @ole_excel.DisplayAlerts.should be false
+        excel = Excel.current
+        excel.DisplayAlerts.should be false
+      end
+
+      it "should set displayalerts true" do
+        @ole_excel.DisplayAlerts.should be true
+        excel = Excel.current(:displayalerts => true)
+        excel.DisplayAlerts.should be true
+      end
+
+      it "should set displayalerts true, even if false before" do
+        @ole_excel.DisplayAlerts = false
+        @ole_excel.DisplayAlerts.should be false
+        excel = Excel.current(:displayalerts => true)
+        excel.DisplayAlerts.should be true
+      end
+
+      it "should set displayalerts false" do
+        @ole_excel.DisplayAlerts.should be true
+        excel = Excel.current(:displayalerts => false)
+        excel.DisplayAlerts.should be false
+      end
+
+    end
+
     context "with already open Excel instances and an open unsaved workbook" do
 
       before do
@@ -1733,6 +1807,8 @@ module RobustExcelOle
         @excel.Visible.should be true
         @excel.ScreenUpdating.should be true
         book = Workbook.open(@simple_file)
+        book.excel.calculation = :manual
+        book.save
         @excel.Calculation.should == XlCalculationManual
         book.close
       end
@@ -2050,10 +2126,10 @@ module RobustExcelOle
       it "should raise an error if name cannot be evaluated" do
         expect{
           @excel1.set_namevalue_glob("foo", 1)
-          }.to raise_error(NameNotFound, /name "foo"/)
+          }.to raise_error(RangeNotEvaluatable, /cannot assign value to range named "foo"/)
         expect{
           @excel1["foo"] = 1
-          }.to raise_error(NameNotFound, /name "foo"/)
+          }.to raise_error(RangeNotEvaluatable, /cannot assign value to range named "foo"/)
       end
 
       it "should color the cell" do
@@ -2117,7 +2193,7 @@ module RobustExcelOle
       it "should raise an error if name cannot be evaluated" do
         expect{
           @excel1.set_namevalue_glob("foo", 1)
-        }.to raise_error(NameNotFound, /name "foo" not in/)
+        }.to raise_error(RangeNotEvaluatable, /cannot assign value to range named "foo" in/)
       end
 
       it "should color the cell" do
