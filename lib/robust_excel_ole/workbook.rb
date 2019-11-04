@@ -15,7 +15,6 @@ module RobustExcelOle
     attr_accessor :ole_workbook
     attr_accessor :stored_filename
     attr_accessor :modified_cells
-    attr_accessor :options
     attr_reader :workbook
 
     alias ole_object ole_workbook
@@ -31,7 +30,8 @@ module RobustExcelOle
       :update_links => :never
     }.freeze
 
-    ABBREVIATIONS = [[:default,:d], [:force, :f], [:excel, :e], [:visible, :v]].freeze
+    ABBREVIATIONS = [[:default,:d], [:force, :f], [:excel, :e], [:visible, :v],
+                     [:if_obstructed, :if_blocked]].freeze
 
 
     # opens a workbook.
@@ -65,8 +65,8 @@ module RobustExcelOle
     #                  :alert or :excel     -> gives control to Excel
     #                  :new_excel           -> opens the new workbook in a new Excel instance
     # :if_obstructed  if a workbook with the same name in a different path is open, then
-    #                  :raise               -> raises an exception
-    #                  :forget              -> closes the old workbook, open the new workbook
+    # or               :raise               -> raises an exception
+    # :if_blocked      :forget              -> closes the old workbook, open the new workbook
     #                  :save                -> saves the old workbook, close it, open the new workbook
     #                  :close_if_saved      -> closes the old workbook and open the new workbook, if the old workbook is saved,
     #                                          otherwise raises an exception.
@@ -79,20 +79,25 @@ module RobustExcelOle
     # :update_links         true -> user is being asked how to update links, false -> links are never updated
     # @return [Workbook] a representation of a workbook
     def self.open(file, opts = { }, &block)
+      raise(FileNameNotGiven, 'filename is nil') if file.nil?
+      raise(FileNotFound, "file #{General.absolute_path(file).inspect} is a directory") if File.directory?(file)
       options = process_options(opts)
       book = nil
-      if (options[:force][:excel] != :new) && (options[:force][:excel] != :reserved_new)
-        # if readonly is true, then prefer a book that is given in force_excel if this option is set
-        forced_excel = if options[:force][:excel]
-          options[:force][:excel] == :current ? excel_class.new(:reuse => true) : excel_of(options[:force][:excel])
+      if options[:force][:excel] != :new
+        # if readonly is true, then prefer a book that is given in force_excel if this option is set       
+        forced_excel = (options[:force][:excel].nil? || options[:force][:excel] == :current) ? 
+          excel_class.new(:reuse => true) : excel_of(options[:force][:excel])
+        begin
+          book = if File.exists?(file)
+            bookstore.fetch(file, :prefer_writable => !(options[:read_only]),
+                                  :prefer_excel    => (options[:read_only] ? forced_excel : nil))
+          end
+        rescue
+          trace "#{$!.message}"
         end
-        book = bookstore.fetch(file,
-                :prefer_writable => !(options[:read_only]),
-                :prefer_excel    => (options[:read_only] ? forced_excel : nil)) rescue nil
-        if book
+        if book          
           if (!(options[:force][:excel]) || (forced_excel == book.excel)) &&
              !(book.alive? && !book.saved && (options[:if_unsaved] != :accept))
-            book.options = options
             book.ensure_excel(options) # unless book.excel.alive?
             # if the ReadOnly status shall be changed, save, close and reopen it
             # removed the feature for the next time
@@ -129,11 +134,10 @@ module RobustExcelOle
         @excel = excel_class.new(win32ole_excel)
         @excel.visible = options[:force][:visible] unless options[:force][:visible].nil?
         @excel.calculation = options[:calculation] unless options[:calculation].nil?
-        ensure_excel(options)
       else
-        file = file_or_workbook
+        filename = file_or_workbook        
         ensure_excel(options)
-        ensure_workbook(file, options)
+        ensure_workbook(filename, options)       
       end
       bookstore.store(self)
       @modified_cells = []
@@ -213,40 +217,49 @@ module RobustExcelOle
   public
 
     # @private
-    def ensure_excel(options)  
-      if @excel && @excel.alive?
-        @excel.created = false
-        return
+    def connect(filename,options)
+      abs_filename = General.absolute_path(filename).tr('/','\\')
+      @ole_workbook = begin
+        WIN32OLE.connect(abs_filename)
+      rescue
+        trace "WIN32OLE.connect error: #{$!.message}"
       end
-      excel_option = options[:force].nil? || options[:force][:excel].nil? ? options[:default][:excel] : options[:force][:excel]
-      @excel = self.class.excel_of(excel_option) unless excel_option == :current || excel_option == :new || excel_option == :reserved_new
-      excel_class.new(:reuse => false) if (excel_option == :reserved_new) && Excel.known_excel_instances.empty?
+      self.visible = options[:force][:visible].nil? ? options[:default][:visible] : options[:force][:visible]
+      @ole_workbook.CheckCompatibility = options[:check_compatibility]
+    end  
+
+    # @private
+    def ensure_excel(options)  
+      excel_option = options[:force][:excel].nil? ? options[:default][:excel] : options[:force][:excel]
+      @excel = self.class.excel_of(excel_option) unless excel_option == :current || excel_option == :new
       @excel = excel_class.new(:reuse => (excel_option == :current)) unless @excel && @excel.alive?
-      @excel
+      @excel.visible = options[:force][:visible] unless options[:force][:visible].nil?
+      @excel.calculation = options[:calculation] unless options[:calculation].nil?
     end
 
 
     # @private
     def ensure_workbook(filename, options)  
-      filename = @stored_filename ? @stored_filename : filename
-      raise(FileNameNotGiven, 'filename is nil') if filename.nil?
-      if File.directory?(filename)
-        raise(FileNotFound, "file #{General.absolute_path(filename).inspect} is a directory")
-      end        
+      #filename = General.mapped_network_path_to_file_path(filename)
+      filename = @stored_filename ? @stored_filename : filename      
       manage_nonexisting_file(filename,options)
       workbooks = @excel.Workbooks
       @ole_workbook = workbooks.Item(File.basename(filename)) rescue nil if @ole_workbook.nil?
       if @ole_workbook
         manage_blocking_or_unsaved_workbook(filename,options)
       else
-        open_or_create_workbook(filename, options)
+        #if options[:force][:excel].nil? || options[:force][:excel] == :current  
+        #  connect(filename,options)
+        #else
+          open_or_create_workbook(filename, options)
+        #end
       end
     end
 
   private
 
     # @private
-    def manage_nonexisting_file(filename,options)
+    def manage_nonexisting_file(filename,options)      
       return if File.exist?(filename)
       abs_filename = General.absolute_path(filename).tr('/','\\')
       if options[:if_absent] == :create
@@ -818,7 +831,7 @@ module RobustExcelOle
           end
         end
       rescue #WIN32OLERuntimeError 
-        ##puts "#{$!.message}"
+        trace "#{$!.message}"
         raise WorksheetREOError, "could not add given worksheet #{sheet.inspect}"
       end
       #ole_sheet = @excel.Activesheet
@@ -928,8 +941,10 @@ module RobustExcelOle
     end
 
     # makes both the Excel instance and the window of the workbook visible, or the window invisible
+    # does not do anything if geben visible_value is nil
     # @param [Boolean] visible_value determines whether the workbook shall be visible
     def visible= visible_value
+      return if visible_value.nil?
       @excel.visible = true if visible_value
       self.window_visible = visible_value
     end
