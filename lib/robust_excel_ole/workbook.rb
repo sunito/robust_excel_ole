@@ -40,7 +40,7 @@ module RobustExcelOle
     # @option opts [Hash] :default or :d
     # @option opts [Hash] :force or :f
     # @option opts [Symbol]  :if_unsaved     :raise (default), :forget, :accept, :alert, :excel, or :new_excel
-    # @option opts [Symbol]  :if_obstructed  :raise (default), :forget, :save, :close_if_saved, or _new_excel
+    # @option opts [Symbol]  :if_blocked     :raise (default), :forget, :save, :close_if_saved, or _new_excel
     # @option opts [Symbol]  :if_absent      :raise (default) or :create
     # @option opts [Boolean] :read_only      true (default) or false
     # @option opts [Boolean] :update_links   :never (default), :always, :alert
@@ -175,8 +175,8 @@ module RobustExcelOle
             erg[new_key] = value
           end
         end
-        erg[:default] = {} if erg[:default].nil?
-        erg[:force] = {} if erg[:force].nil?
+        erg[:default] ||= {}
+        erg[:force] ||= {}
         force_list = [:visible, :excel]
         erg.each { |key,value| erg[:force][key] = value if force_list.include?(key) }
         erg[:default][:excel] = erg[:default_excel] unless erg[:default_excel].nil?
@@ -245,11 +245,13 @@ module RobustExcelOle
       if RUBY_PLATFORM =~ /java/ && (options[:force][:excel].nil? || options[:force][:excel] == :current)
         begin
           connect(filename,options)  
-        rescue WorkbookConnectingNotAliveError
+        rescue WorkbookConnectingUnsavedError
           raise WorkbookNotSaved, "workbook is already open but not saved: #{File.basename(filename).inspect}"
-        rescue WorkbookConnectingBlockingError # can't find moniker
+        rescue WorkbookConnectingBlockingError
           raise WorkbookBlocked, "can't open workbook #{filename}"+
             "\nbecause it is being blocked by a workbook with the same name in a different path."
+        rescue WorkbookConnectingUnknownError
+          raise WorkbookREOError, "can't connect to workbook #{filename}"
         end
       else
         workbooks = @excel.Workbooks
@@ -264,7 +266,7 @@ module RobustExcelOle
           end
         end       
       end
-      set_options(options)
+      set_options(filename, options)
     end
 
   private
@@ -276,12 +278,20 @@ module RobustExcelOle
       @ole_workbook = begin
         WIN32OLE.connect(abs_filename)
       rescue
-        raise WorkbookConnectingBlockingError
+        if $!.message =~ /moniker/
+          raise WorkbookConnectingBlockingError
+        else
+          raise WorkbookConnectingUnknownError
+        end
       end
       ole_excel = begin
-        WIN32OLE.connect(@ole_workbook.Fullname).Application 
+        @ole_workbook.Application     
       rescue 
-        raise WorkbookConnectingNotAliveError
+        if $!.message =~ /dispid/
+          raise WorkbookConnectingUnsavedError
+        else
+          raise WorkbookConnectingUnknownError
+        end
       end
       @excel = excel_class.new(ole_excel)
     end
@@ -359,6 +369,7 @@ module RobustExcelOle
         end
       when :new_excel
         @excel = excel_class.new(:reuse => false)
+        @ole_workbook = nil
         open_or_create_workbook(filename, options)
       else
         raise OptionInvalid, ":if_blocked: invalid option: #{options[:if_obstructed].inspect}" +
@@ -383,6 +394,7 @@ module RobustExcelOle
         @excel.with_displayalerts(true) { open_or_create_workbook(filename,options) }
       when :new_excel
         @excel = excel_class.new(:reuse => false)
+        @ole_workbook = nil
         open_or_create_workbook(filename, options)
       else
         raise OptionInvalid, ":if_unsaved: invalid option: #{options[:if_unsaved].inspect}" +
@@ -391,43 +403,47 @@ module RobustExcelOle
     end
 
     # @private
-    def open_or_create_workbook(filename, options)  
-      if !@ole_workbook || (options[:if_unsaved] == :alert) || options[:if_obstructed]
+    def open_or_create_workbook(filename, options)       
+      return if @ole_workbook && options[:if_unsaved] != :alert
+      begin
+        abs_filename = General.absolute_path(filename)
         begin
-          abs_filename = General.absolute_path(filename)
-          begin
-            workbooks = @excel.Workbooks
-          rescue WIN32OLERuntimeError => msg
-            raise UnexpectedREOError, "WIN32OLERuntimeError: #{msg.message} #{msg.backtrace}"
+          workbooks = @excel.Workbooks
+        rescue WIN32OLERuntimeError => msg
+          raise UnexpectedREOError, "WIN32OLERuntimeError: #{msg.message} #{msg.backtrace}"
+        end
+        begin
+          with_workaround_linked_workbooks_excel2007(options) do
+            # temporary workaround until jruby-win32ole implements named parameters (Java::JavaLang::RuntimeException (createVariant() not implemented for class org.jruby.RubyHash)
+            workbooks.Open(abs_filename, 
+                                      updatelinks_vba(options[:update_links]), 
+                                      options[:read_only] )
           end
+        rescue WIN32OLERuntimeError => msg
+          # for Excel2007: for option :if_unsaved => :alert and user cancels: this error appears?
+          # if yes: distinguish these events
+          raise UnexpectedREOError, "WIN32OLERuntimeError: #{msg.message} #{msg.backtrace}"
+        end
+        begin
+          # workaround for bug in Excel 2010: workbook.Open does not always return the workbook when given file name
           begin
-            with_workaround_linked_workbooks_excel2007(options) do
-              # temporary workaround until jruby-win32ole implements named parameters (Java::JavaLang::RuntimeException (createVariant() not implemented for class org.jruby.RubyHash)
-              workbooks.Open(abs_filename, 
-                                        updatelinks_vba(options[:update_links]), 
-                                        options[:read_only] )
-            end
+            @ole_workbook = workbooks.Item(File.basename(filename))
           rescue WIN32OLERuntimeError => msg
-            # for Excel2007: for option :if_unsaved => :alert and user cancels: this error appears?
-            # if yes: distinguish these events
-            raise UnexpectedREOError, "WIN32OLERuntimeError: #{msg.message} #{msg.backtrace}"
+            raise UnexpectedREOError, "WIN32OLERuntimeError: #{msg.message}"
           end
-          begin
-            # workaround for bug in Excel 2010: workbook.Open does not always return the workbook when given file name
-            begin
-              @ole_workbook = workbooks.Item(File.basename(filename))
-            rescue WIN32OLERuntimeError => msg
-              raise UnexpectedREOError, "WIN32OLERuntimeError: #{msg.message}"
-            end
-          rescue WIN32OLERuntimeError => msg
-            raise UnexpectedREOError, "WIN32OLERuntimeError: #{msg.message} #{msg.backtrace}"
-          end
+        rescue WIN32OLERuntimeError => msg
+          raise UnexpectedREOError, "WIN32OLERuntimeError: #{msg.message} #{msg.backtrace}"
         end
       end
     end
 
     # @private
-    def set_options(options)
+    def set_options(filename, options)
+      if @ole_workbook.ReadOnly != options[:read_only]
+        @excel.with_displayalerts(false) { @ole_workbook.Close }
+        @ole_workbook = nil
+        open_or_create_workbook(filename, options)
+      end
       if options[:force][:visible].nil? && !options[:default][:visible].nil?
         if @excel.created
           self.visible = options[:default][:visible]
@@ -863,6 +879,7 @@ module RobustExcelOle
                 ole_workbook.Worksheets.Add(base_sheet.ole_worksheet) 
               end
               base_sheet.Move(ole_workbook.Worksheets.Item(ole_workbook.Worksheets.Count-1))
+              ole_workbook.Worksheets.Item(ole_workbook.Worksheets.Count).Activate
             end
           end
         end
