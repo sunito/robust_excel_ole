@@ -32,7 +32,9 @@ describe Workbook do
     @simple_file_other_path1 = @simple_file_other_path
     @another_simple_file1 = @another_simple_file
     @simple_file_direct = File.join(File.dirname(__FILE__), 'data') + '/workbook.xls'
-    @simple_file_via_network = File.join('N:/', 'data') + '/workbook.xls'
+    #@simple_file_via_network = File.join('N:/', 'data') + '/workbook.xls'
+    @simple_file_network_path = "N:/data/workbook.xls"
+    @simple_file_hostname_share_path = '//DESKTOP-A3C5CJ6/spec/data/workbook.xls'
 
   end
 
@@ -354,9 +356,9 @@ describe Workbook do
 
   describe "network paths" do
 
-    it "should open the workbokk via network path" do
-      book1 = Workbook.open(@simple_file)
-      book2 = Workbook.open(@simple_file_via_network)
+    it "should open the workbook via network path" do
+      book1 = Workbook.open(@simple_file_hostname_share_path)
+      book2 = Workbook.open(@simple_file_network_path)
       book1.should === book2
       book1.Fullname.should == book2.Fullname
     end
@@ -885,14 +887,14 @@ describe Workbook do
         book4.should be_alive
         book4.should be_a Workbook
         book4.excel.should == book2.excel
-        #book4.Readonly.should == true
+        book4.Readonly.should == true
         book4.should_not == book2 
         book4.close
         book5 = Workbook.open(@simple_file1, :force => {:excel => book2})
         book5.should be_alive
         book5.should be_a Workbook
         book5.excel.should == book2.excel
-        #book5.Readonly.should == true
+        book5.Readonly.should == true
         book5.should_not == book2 
         book5.close
         book3.close
@@ -1041,14 +1043,14 @@ describe Workbook do
         book4.should be_alive
         book4.should be_a Workbook
         book4.excel.should == book2.excel
-        #book4.Readonly.should == true
+        book4.Readonly.should == true
         book4.should_not == book2 
         book4.close
         book5 = Workbook.open(@simple_file1, :excel => book2)
         book5.should be_alive
         book5.should be_a Workbook
         book5.excel.should == book2.excel
-        #book5.Readonly.should == true
+        book5.Readonly.should == true
         book5.should_not == book2 
         book5.close
         book3.close
@@ -1199,14 +1201,14 @@ describe Workbook do
         book4.should be_alive
         book4.should be_a Workbook
         book4.excel.should == book2.excel
-        #book4.Readonly.should == false
+        book4.Readonly.should == true
         book4.should_not == book2 
         book4.close
         book5 = Workbook.open(@simple_file1, :force_excel => book2)
         book5.should be_alive
         book5.should be_a Workbook
         book5.excel.should == book2.excel
-        #book5.Readonly.should == false
+        book5.Readonly.should == true
         book5.should_not == book2 
         book5.close
         book3.close
@@ -1918,6 +1920,7 @@ describe Workbook do
         @book = Workbook.open(@simple_file)
         @sheet = @book.sheet(1)
         @book.add_sheet(@sheet, :as => 'a_name')
+        @book.visible = true
       end
 
       after do
@@ -1951,8 +1954,17 @@ describe Workbook do
 
         it "should open the new book and close the unsaved book, if user answers 'yes'" do
           # "Yes" is the  default. --> language independent
-          @key_sender.puts "{enter}"
+          #@key_sender.puts "{enter}"
           @new_book = Workbook.open(@simple_file1, :if_unsaved => :alert)
+          @new_book.should be_alive
+          @new_book.filename.downcase.should == @simple_file1.downcase
+          @book.should_not be_alive
+        end
+
+        it "should open the new book and close the unsaved book, if user answers 'yes'" do
+          # "Yes" is the  default. --> language independent
+          @key_sender.puts "{enter}"
+          @new_book = Workbook.open(@simple_file1, :if_unsaved => :excel)
           @new_book.should be_alive
           @new_book.filename.downcase.should == @simple_file1.downcase
           @book.should_not be_alive
@@ -1971,22 +1983,14 @@ describe Workbook do
           @book.should be_alive
         end
 
-        it "should open the new book and close the unsaved book, if user answers 'yes'" do
-          # "Yes" is the  default. --> language independent
-          @key_sender.puts "{enter}"
-          @new_book = Workbook.open(@simple_file1, :if_unsaved => :excel)
-          @new_book.should be_alive
-          @new_book.filename.downcase.should == @simple_file1.downcase
-          #@book.should_not be_alive
-        end
+        
 
         it "should not open the new book and not close the unsaved book, if user answers 'no'" do
           # "No" is right to "Yes" (the  default). --> language independent
-          # strangely, in the "no" case, the question will sometimes be repeated three times
-          #@book.excel.Visible = true
-          @key_sender.puts "{right}{enter}"
-          @key_sender.puts "{right}{enter}"
-          @key_sender.puts "{right}{enter}"
+          # strangely, in the "no" case, the question will sometimes be repeated three time
+          #@key_sender.puts "{right}{enter}"
+          #@key_sender.puts "{right}{enter}"
+          #@key_sender.puts "{right}{enter}"
           expect{
             Workbook.open(@simple_file, :if_unsaved => :excel)
           }.to raise_error(UnexpectedREOError)
@@ -2220,7 +2224,7 @@ describe Workbook do
 
     context "with :read_only" do
       
-      it "should reopen the book with writable (unsaved changes from readonly will not be saved)" do
+      it "should not reopen the book with writable" do
         book = Workbook.open(@simple_file1, :read_only => true)
         book.ReadOnly.should be true
         book.should be_alive
@@ -2229,10 +2233,25 @@ describe Workbook do
         sheet[1,1] = sheet[1,1].Value == "foo" ? "bar" : "foo"
         book.Saved.should be false
         new_book = Workbook.open(@simple_file1, :read_only => false, :if_unsaved => :accept)
-        new_book.ReadOnly.should be false 
+        new_book.ReadOnly.should be true 
         new_book.should be_alive
         book.should be_alive   
-        new_book.should == book 
+        new_book.should == book         
+      end
+
+      it "should not reopen the book with writable" do
+        book = Workbook.open(@simple_file1, :read_only => true)
+        book.ReadOnly.should be true
+        book.should be_alive
+        sheet = book.sheet(1)
+        old_cell_value = sheet[1,1].Value
+        sheet[1,1] = sheet[1,1].Value == "foo" ? "bar" : "foo"
+        book.Saved.should be false
+        new_book = Workbook.open(@simple_file1, :read_only => false, :if_unsaved => :forget)
+        new_book.ReadOnly.should be false 
+        new_book.should be_alive
+        book.should_not be_alive   
+        new_book.should_not == book 
         new_sheet = new_book.sheet(1)
         new_cell_value = new_sheet[1,1].Value
         new_cell_value.should == old_cell_value
@@ -2247,8 +2266,8 @@ describe Workbook do
         sheet[1,1] = sheet[1,1].Value == "foo" ? "bar" : "foo"
         book.Saved.should be false
         new_book = Workbook.open(@simple_file1, :read_only => true, :if_unsaved => :accept)
-        new_book.ReadOnly.should be true
-        new_book.Saved.should be true
+        new_book.ReadOnly.should be false
+        new_book.Saved.should be false
         new_book.should == book
       end
 
@@ -2261,13 +2280,13 @@ describe Workbook do
         sheet[1,1] = sheet[1,1].Value == "foo" ? "bar" : "foo"
         book.Saved.should be false
         new_book = Workbook.open(@simple_file1, :if_unsaved => :accept, :force => {:excel => book.excel}, :read_only => false)
-        new_book.ReadOnly.should be false 
+        new_book.ReadOnly.should be true 
         new_book.should be_alive
         book.should be_alive   
         new_book.should == book 
         new_sheet = new_book.sheet(1)
         new_cell_value = new_sheet[1,1].Value
-        new_cell_value.should == old_cell_value
+        new_cell_value.should_not == old_cell_value
       end
 
       it "should reopen the book with readonly (unsaved changes of the writable should be saved)" do
@@ -2279,8 +2298,8 @@ describe Workbook do
         sheet[1,1] = sheet[1,1].Value == "foo" ? "bar" : "foo"
         book.Saved.should be false
         new_book = Workbook.open(@simple_file1, :force => {:excel => book.excel}, :read_only => true, :if_unsaved => :accept)
-        new_book.ReadOnly.should be true
-        new_book.Saved.should be true
+        new_book.ReadOnly.should be false
+        new_book.Saved.should be false
         new_book.should == book
         new_sheet = new_book.sheet(1)
         new_cell_value = new_sheet[1,1].Value
