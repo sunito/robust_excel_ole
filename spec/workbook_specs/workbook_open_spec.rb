@@ -152,6 +152,18 @@ describe Workbook do
           }.to raise_error(WorkbookNotSaved, /workbook is already open but not saved: "workbook.xls"/)
       end
 
+      it "should let the workbook open, if :if_unsaved is :save" do        
+        @ole_wb.Worksheets.Add
+        sheet_num = @ole_wb.Worksheets.Count
+        new_book = Workbook.open(@simple_file1, :if_unsaved => :save)
+        new_book.should be_alive
+        new_book.should be_a Workbook
+        new_book.Worksheets.Count.should == sheet_num
+        new_book.close
+        new_book2 = Workbook.open(@simple_file1)
+        new_book2.Worksheets.Count.should == sheet_num
+      end
+
       it "should let the workbook open, if :if_unsaved is :accept" do        
         @ole_wb.Worksheets.Add
         sheet_num = @ole_wb.Worksheets.Count
@@ -159,6 +171,10 @@ describe Workbook do
         new_book.should be_alive
         new_book.should be_a Workbook
         new_book.Worksheets.Count.should == sheet_num
+        new_book.Saved.should be false
+        new_book.close(:if_unsaved => :forget)
+        new_book2 = Workbook.open(@simple_file1)
+        new_book2.Worksheets.Count.should == sheet_num - 1
       end
 
       it "should close the workbook, if :if_unsaved is :forget" do        
@@ -333,6 +349,14 @@ describe Workbook do
     end
 
     context "with :force => {:excel}" do
+
+      it "should raise if excel is not alive" do
+        excel1 = Excel.create
+        excel1.close
+        expect{
+          book1 = Workbook.open(@simple_file1, :force => {:excel => excel1})
+          }.to raise_error(ExcelREOError, "excel is not alive")
+      end
 
       it "should open in a provided Excel" do
         book1 = Workbook.open(@simple_file1, :force => {:excel => :new})
@@ -1988,9 +2012,9 @@ describe Workbook do
         it "should not open the new book and not close the unsaved book, if user answers 'no'" do
           # "No" is right to "Yes" (the  default). --> language independent
           # strangely, in the "no" case, the question will sometimes be repeated three time
-          #@key_sender.puts "{right}{enter}"
-          #@key_sender.puts "{right}{enter}"
-          #@key_sender.puts "{right}{enter}"
+          @key_sender.puts "{right}{enter}"
+          @key_sender.puts "{right}{enter}"
+          @key_sender.puts "{right}{enter}"
           expect{
             Workbook.open(@simple_file, :if_unsaved => :excel)
           }.to raise_error(UnexpectedREOError)
@@ -2233,7 +2257,7 @@ describe Workbook do
         sheet[1,1] = sheet[1,1].Value == "foo" ? "bar" : "foo"
         book.Saved.should be false
         new_book = Workbook.open(@simple_file1, :read_only => false, :if_unsaved => :accept)
-        new_book.ReadOnly.should be true 
+        new_book.ReadOnly.should be false 
         new_book.should be_alive
         book.should be_alive   
         new_book.should == book         
@@ -2257,6 +2281,19 @@ describe Workbook do
         new_cell_value.should == old_cell_value
       end
 
+      it "should raise an error when trying to reopen the book as read_only while the writable book had unsaved changes" do
+        book = Workbook.open(@simple_file1, :read_only => false)
+        book.ReadOnly.should be false
+        book.should be_alive
+        sheet = book.sheet(1)
+        old_cell_value = sheet[1,1].Value        
+        sheet[1,1] = sheet[1,1].Value == "foo" ? "bar" : "foo"
+        book.Saved.should be false
+        expect{
+          Workbook.open(@simple_file1, :read_only => true, :if_unsaved => :accept)
+        }.to raise_error(OptionInvalid)
+      end
+
       it "should not raise an error when trying to reopen the book as read_only while the writable book had unsaved changes" do
         book = Workbook.open(@simple_file1, :read_only => false)
         book.ReadOnly.should be false
@@ -2265,42 +2302,8 @@ describe Workbook do
         old_cell_value = sheet[1,1].Value        
         sheet[1,1] = sheet[1,1].Value == "foo" ? "bar" : "foo"
         book.Saved.should be false
-        new_book = Workbook.open(@simple_file1, :read_only => true, :if_unsaved => :accept)
-        new_book.ReadOnly.should be false
-        new_book.Saved.should be false
-        new_book.should == book
-      end
-
-      it "should reopen the book with writable in the same Excel instance (unsaved changes from readonly will not be saved)" do
-        book = Workbook.open(@simple_file1, :read_only => true)
-        book.ReadOnly.should be true
-        book.should be_alive
-        sheet = book.sheet(1)
-        old_cell_value = sheet[1,1].Value
-        sheet[1,1] = sheet[1,1].Value == "foo" ? "bar" : "foo"
-        book.Saved.should be false
-        new_book = Workbook.open(@simple_file1, :if_unsaved => :accept, :force => {:excel => book.excel}, :read_only => false)
-        new_book.ReadOnly.should be true 
-        new_book.should be_alive
-        book.should be_alive   
-        new_book.should == book 
-        new_sheet = new_book.sheet(1)
-        new_cell_value = new_sheet[1,1].Value
-        new_cell_value.should_not == old_cell_value
-      end
-
-      it "should reopen the book with readonly (unsaved changes of the writable should be saved)" do
-        book = Workbook.open(@simple_file1, :force => {:excel => :new}, :read_only => false)
-        book.ReadOnly.should be false
-        book.should be_alive
-        sheet = book.sheet(1)
-        old_cell_value = sheet[1,1].Value        
-        sheet[1,1] = sheet[1,1].Value == "foo" ? "bar" : "foo"
-        book.Saved.should be false
-        new_book = Workbook.open(@simple_file1, :force => {:excel => book.excel}, :read_only => true, :if_unsaved => :accept)
-        new_book.ReadOnly.should be false
-        new_book.Saved.should be false
-        new_book.should == book
+        new_book = Workbook.open(@simple_file1, :read_only => true, :if_unsaved => :save)
+        new_book.ReadOnly.should be true
         new_sheet = new_book.sheet(1)
         new_cell_value = new_sheet[1,1].Value
         new_cell_value.should_not == old_cell_value

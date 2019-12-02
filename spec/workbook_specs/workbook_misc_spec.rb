@@ -198,6 +198,7 @@ describe Workbook do
     end
   end
 
+=begin
   describe "default-visible" do
 
     it "should keep the visibility of the open workbook" do
@@ -288,28 +289,28 @@ describe Workbook do
       excel2 = book1.excel
       excel2.should == excel1
       excel2.Visible.should be false
-      book2.Windows(book2.Name).Visible.should be true
+      book2.Windows(book2.Name).Visible.should be true      
     end
 
     it "should open the workbook visible if the workbook is new" do
       book1 = Workbook.open(@simple_file1, :default => {:visible => true})
-      book1.visible.should be true
       book1.excel.Visible.should be true
       book1.Windows(book1.Name).Visible.should be true
+      book1.visible.should be true      
     end
 
     it "should open the workbook invisible if the workbook is new" do
       book1 = Workbook.open(@simple_file1, :default => {:visible => false})
-      book1.visible.should be false
       book1.excel.Visible.should be false
       book1.Windows(book1.Name).Visible.should be false
+      book1.visible.should be false      
     end
 
     it "should open the workbook invisible per default if the workbook is new" do
       book1 = Workbook.open(@simple_file1)
-      book1.visible.should be false
       book1.excel.Visible.should be false
       book1.Windows(book1.Name).Visible.should be true
+      book1.visible.should be false      
     end
 
     it "should open the workbook visible if the old Excel is closed" do
@@ -322,9 +323,9 @@ describe Workbook do
       excel1.close
       book2 = Workbook.open(@simple_file1, :default => {:visible => true})
       excel2 = book2.excel
-      book2.visible.should be true
-      excel2.Visible.should be true
       book1.Windows(book1.Name).Visible.should be true
+      excel2.Visible.should be true  
+      book2.visible.should be true
     end
 
     it "should open the workbook invisible if the old Excel is closed" do
@@ -337,12 +338,14 @@ describe Workbook do
       excel1.close
       book2 = Workbook.open(@simple_file1, :default => {:visible => false})
       excel2 = book2.excel
-      book2.visible.should be false
       excel2.Visible.should be false
       book1.Windows(book1.Name).Visible.should be false
+      book2.visible.should be false      
     end
 
   end
+
+=end
 
   describe "force-visible" do
 
@@ -386,7 +389,7 @@ describe Workbook do
     it "should set :visible to false" do
       book1 = Workbook.open(@simple_file, :visible => false)
       book1.excel.Visible.should be false
-      book1.Windows(book1.Name).Visible.should be false
+      book1.Windows(book1.Name).Visible.should be true
       book1.visible.should be false
     end
 
@@ -418,7 +421,7 @@ describe Workbook do
       excel1 = Excel.create
       book1 = Workbook.open(@simple_file, :visible => false)
       book1.excel.Visible.should be false
-      book1.Windows(book1.Name).Visible.should be false
+      book1.Windows(book1.Name).Visible.should be true
       book1.visible.should be false
     end
 
@@ -469,7 +472,7 @@ describe Workbook do
       book1 = Workbook.open(@simple_file)
       book2 = Workbook.open(@different_file, :default_excel => :new, :visible => false)
       book2.excel.Visible.should be false
-      book2.Windows(book2.Name).Visible.should be false
+      book2.Windows(book2.Name).Visible.should be true
       book2.visible.should be false
     end
 
@@ -727,10 +730,10 @@ describe Workbook do
       @book1.namevalue_glob("foo", :default => 1).should == 1
       expect {
           @book1.set_namevalue_glob("foo","bar")
-      }.to raise_error(NameNotFound, /name "foo" not in #<Workbook: another_workbook/)
+      }.to raise_error(RangeNotEvaluatable, /cannot assign value to range named "foo"/)
       expect {
           @book1["foo"] = "bar"
-      }.to raise_error(NameNotFound, /name "foo" not in #<Workbook: another_workbook/)
+      }.to raise_error(RangeNotEvaluatable, /cannot assign value to range named "foo"/)
       @book1.namevalue_glob("empty", :default => 1).should be_nil
     end    
 
@@ -916,7 +919,7 @@ describe Workbook do
         excel1 = Excel.new(:reuse => false, :visible => false)
         book1 = Workbook.open(@simple_file, :visible => false)
         excel1.Visible.should be false
-        book1.Windows(book1.Name).Visible.should be false
+        book1.Windows(book1.Name).Visible.should be true
         book1.visible.should be false
       end
 
@@ -985,7 +988,7 @@ describe Workbook do
         excel1 = Excel.new(:reuse => false, :visible => false)
         book1 = Workbook.open(@simple_file, :visible => false)
         excel1.Visible.should be false
-        book1.Windows(book1.Name).Visible.should be false
+        book1.Windows(book1.Name).Visible.should be true
         book1.visible.should be false
         excel1.visible = true
         book2 = Workbook.open(@different_file)
@@ -1035,7 +1038,7 @@ describe Workbook do
         @book2.visible = false
         @book2.Saved.should be true
         @book2.excel.Visible.should be false
-        @book2.Windows(@book2.Name).Visible.should be false
+        @book2.Windows(@book2.Name).Visible.should be true
         @book2.visible.should be false
       end
 

@@ -25,13 +25,14 @@ module RobustExcelOle
       :if_unsaved    => :raise,
       :if_obstructed => :raise,
       :if_absent     => :raise,
-      :read_only => false,
+      #:read_only => false,
       :check_compatibility => false,
-      :update_links => :never
+      :update_links => :never,
+      :if_exists => :raise
     }.freeze
 
     CORE_DEFAULT_OPTEN_OPTS = {
-      :default => {:excel => :current, :visible => true}, :force => {}, :update_links => :never
+      :default => {:excel => :current}, :force => {}, :update_links => :never
     }.freeze
 
     ABBREVIATIONS = [[:default,:d], [:force, :f], [:excel, :e], [:visible, :v],
@@ -43,7 +44,7 @@ module RobustExcelOle
     # @param [Hash] opts the options
     # @option opts [Hash] :default or :d
     # @option opts [Hash] :force or :f
-    # @option opts [Symbol]  :if_unsaved     :raise (default), :forget, :accept, :alert, :excel, or :new_excel
+    # @option opts [Symbol]  :if_unsaved     :raise (default), :forget, :save, :accept, :alert, :excel, or :new_excel
     # @option opts [Symbol]  :if_blocked     :raise (default), :forget, :save, :close_if_saved, or _new_excel
     # @option opts [Symbol]  :if_absent      :raise (default) or :create
     # @option opts [Boolean] :read_only      true (default) or false
@@ -53,7 +54,7 @@ module RobustExcelOle
     # :default : if the workbook was already open before, then use (unchange) its properties,
     #            otherwise, i.e. if the workbook cannot be reopened, use the properties stated in :default
     # :force   : no matter whether the workbook was already open before, use the properties stated in :force
-    # :default and :force contain: :excel, :visible
+    # :default and :force contain: :excel
     #  :excel   :current (or :active or :reuse)
     #                    -> connects to a running (the first opened) Excel instance,
     #                       excluding the hidden Excel instance, if it exists,
@@ -103,12 +104,12 @@ module RobustExcelOle
         end
         if book      
           # drop the fetched workbook if it shall be opened in another Excel instance
-          # or the workbook is an unsaved workbook that should be accepted
+          # or the workbook is an unsaved workbook that should not be accepted
           if (!(options[:force][:excel]) || (forced_excel == book.excel)) &&
             !(book.alive? && !book.saved && (options[:if_unsaved] != :accept))
             book.ensure_excel(options) 
             # reopen the book if it was closed, otherwise
-            options = options.merge({:force => {:excel => book.excel}}) if book.excel && book.excel.alive?
+            options[:force][:excel] = book.excel if book.excel && book.excel.alive?
             book.ensure_workbook(file,options)
             return book
           end
@@ -222,46 +223,46 @@ module RobustExcelOle
       @excel = if excel_option == :new
         excel_class.new(:reuse => false) 
       elsif excel_option.nil? || excel_option == :current
-        excel_class.new(:reuse => true) unless RUBY_PLATFORM =~ /java/
+        excel_class.new(:reuse => true) # unless RUBY_PLATFORM =~ /java/
       else  #elsif excel_options.is_a?(WIN32OLE) || excel_option.is_a?(Excel) #excel_option.respond_to?(:Hwnd)
         self.class.excel_of(excel_option)
       end
-      if @excel && @excel.alive?
-        @excel.visible = options[:force][:visible] unless options[:force][:visible].nil?
-        @excel.calculation = options[:calculation] unless options[:calculation].nil?
-      end
+      raise ExcelREOError, "excel is not alive" unless @excel && @excel.alive?
     end
 
     # @private
     # restriction for jruby: does not manage conflicts with blocking or unsaved workbooks
     def ensure_workbook(filename, options)  
-      return if @ole_workbook && alive?
-      filename = @stored_filename ? @stored_filename : filename 
-      manage_nonexisting_file(filename,options)
-      if RUBY_PLATFORM =~ /java/ && (options[:force][:excel].nil? || options[:force][:excel] == :current)
-        begin
-          connect(filename,options)  
-        rescue WorkbookConnectingUnsavedError
-          raise WorkbookNotSaved, "workbook is already open but not saved: #{File.basename(filename).inspect}"
-        rescue WorkbookConnectingBlockingError
-          raise WorkbookBlocked, "can't open workbook #{filename}"+
-            "\nbecause it is being blocked by a workbook with the same name in a different path."
-        rescue WorkbookConnectingUnknownError
-          raise WorkbookREOError, "can't connect to workbook #{filename}"
-        end
-      else
-        workbooks = @excel.Workbooks
-        @ole_workbook = workbooks.Item(File.basename(filename)) rescue nil if @ole_workbook.nil?
-        if @ole_workbook
-          manage_blocking_or_unsaved_workbook(filename,options)
-        else
-          #if options[:force][:excel].nil? || options[:force][:excel] == :current
-          if options[:force][:excel] == :current || (options[:force][:excel].nil? && options[:default][:excel] == :current) 
-            connect(filename,options)
-          else 
-            open_or_create_workbook(filename,options)
+      if options[:if_unsaved]==:accept && options[:read_only]==true
+        raise OptionInvalid, ":if_unsaved:accept and :read_only:true not possible"
+      end
+      unless @ole_workbook && alive?
+        filename = @stored_filename ? @stored_filename : filename 
+        manage_nonexisting_file(filename,options)
+        if RUBY_PLATFORM =~ /java/ && (options[:force][:excel].nil? || options[:force][:excel] == :current)
+          begin
+            connect(filename,options)  
+          rescue WorkbookConnectingUnsavedError
+            raise WorkbookNotSaved, "workbook is already open but not saved: #{File.basename(filename).inspect}"
+          rescue WorkbookConnectingBlockingError
+            raise WorkbookBlocked, "can't open workbook #{filename}"+
+              "\nbecause it is being blocked by a workbook with the same name in a different path."
+          rescue WorkbookConnectingUnknownError
+            raise WorkbookREOError, "can't connect to workbook #{filename}"
           end
-        end       
+        else
+          workbooks = @excel.Workbooks
+          @ole_workbook = workbooks.Item(File.basename(filename)) rescue nil if @ole_workbook.nil?
+          if @ole_workbook
+            manage_blocking_or_unsaved_workbook(filename,options)
+          else
+            if options[:force][:excel] == :current || (options[:force][:excel].nil? && options[:default][:excel] == :current) 
+              connect(filename,options)
+            else 
+              open_or_create_workbook(filename,options)
+            end
+          end       
+        end
       end
       set_options(filename, options)
     end
@@ -315,16 +316,6 @@ module RobustExcelOle
     def manage_blocking_or_unsaved_workbook(filename,options)
       obstructed_by_other_book = if (File.basename(filename) == File.basename(@ole_workbook.Fullname)) 
         General.absolute_path(filename) != @ole_workbook.Fullname
-        #p1 = General.absolute_path(filename) 
-        #p2 = @ole_workbook.Fullname
-        #is_same_path = if p1[1..1] == ":" and p2[0..1] == '\\\\' # normal path starting with the drive letter and a path in network notation (starting with 2 backslashes)
-        #  # this is a Workaround for Excel2010 on WinXP: Network drives won't get translated to drive letters. So we'll do it manually:
-        #  p1_pure_path = p1[2..-1]
-        #  p2.end_with?(p1_pure_path)  and p2[0, p2.rindex(p1_pure_path)] =~ /^\\\\[\w\d_]+(\\[\w\d_]+)*$/  # e.g. "\\\\server\\folder\\subfolder"
-        #else
-        #  p1 == p2
-        #end
-        #not is_same_path
       end      
       if obstructed_by_other_book
         # workbook is being obstructed by a workbook with same name and different path
@@ -347,26 +338,17 @@ module RobustExcelOle
          to allow automatic closing of the old workbook (without or with saving before, respectively),
          before the new workbook is being opened."
       when :forget
-        @excel.with_displayalerts(false) { @ole_workbook.Close }
-        @ole_workbook = nil
-        open_or_create_workbook(filename, options)
+        manage_forgetting_workbook(filename, options)       
       when :save
-        save unless @ole_workbook.Saved
-        @ole_workbook.Close
-        @ole_workbook = nil
-        open_or_create_workbook(filename, options)
+        manage_saving_workbook(filename, options)        
       when :close_if_saved
         if !@ole_workbook.Saved
           raise WorkbookBlocked, "workbook with the same name in a different path is unsaved: #{@ole_workbook.Fullname.tr('\\','/')}"
         else
-          @ole_workbook.Close
-          @ole_workbook = nil
-          open_or_create_workbook(filename, options)
+          manage_forgetting_workbook(filename, options)
         end
       when :new_excel
-        @excel = excel_class.new(:reuse => false)
-        @ole_workbook = nil
-        open_or_create_workbook(filename, options)
+        manage_new_excel(filename, options)        
       else
         raise OptionInvalid, ":if_blocked: invalid option: #{options[:if_obstructed].inspect}" +
         "\nHint: Valid values are :raise, :forget, :save, :close_if_saved, :new_excel"
@@ -381,23 +363,41 @@ module RobustExcelOle
         "\nHint: Save the workbook or open the workbook using option :if_unsaved with values :forget and :accept to
          close the unsaved workbook and reopen it, or to let the unsaved workbook open, respectively"
       when :forget
-        @excel.with_displayalerts(false) { @ole_workbook.Close }
-        @ole_workbook = nil
-        open_or_create_workbook(filename, options)
+        manage_forgetting_workbook(filename,options)
       when :accept
         # do nothing
+      when :save
+        manage_saving_workbook(filename, options)
       when :alert, :excel
         @excel.with_displayalerts(true) { open_or_create_workbook(filename,options) }
       when :new_excel
-        @excel = excel_class.new(:reuse => false)
-        @ole_workbook = nil
-        open_or_create_workbook(filename, options)
+        manage_new_excel(filename, options)
       else
         raise OptionInvalid, ":if_unsaved: invalid option: #{options[:if_unsaved].inspect}" +
-        "\nHint: Valid values are :raise, :forget, :accept, :alert, :excel, :new_excel"
+        "\nHint: Valid values are :raise, :forget, :save, :accept, :alert, :excel, :new_excel"
       end
     end
 
+    # @private
+    def manage_forgetting_workbook(filename, options)
+      @excel.with_displayalerts(false) { @ole_workbook.Close }
+      @ole_workbook = nil
+      open_or_create_workbook(filename, options)
+    end
+
+    # @private
+    def manage_saving_workbook(filename, options)
+      save unless @ole_workbook.Saved
+      manage_forgetting_workbook(filename, options)
+    end
+
+    # @private
+    def manage_new_excel(filename, options)
+      @excel = excel_class.new(:reuse => false)
+      @ole_workbook = nil
+      open_or_create_workbook(filename, options)
+    end
+    
     # @private
     def open_or_create_workbook(filename, options)       
       return if @ole_workbook && options[:if_unsaved] != :alert && options[:if_unsaved] != :excel
@@ -434,26 +434,17 @@ module RobustExcelOle
     end
 
     # @private
-    def set_options(filename, options)     
-      if options[:read_only] && options[:read_only] != @ole_workbook.ReadOnly
+    def set_options(filename, options)
+      if (!options[:read_only].nil?) && options[:read_only] != @ole_workbook.ReadOnly
         @excel.with_displayalerts(false) { @ole_workbook.Close }
         @ole_workbook = nil        
         open_or_create_workbook(filename, options)
       end
-      #if options[:force][:visible].nil? && !options[:default][:visible].nil?
-      if options[:force][:visible].nil? && !options[:default][:visible].nil? && 
-        (options[:force][:excel].nil? || options[:force][:excel] == :current)
-        if @excel.created
-          self.visible = options[:default][:visible]
-        else
-          self.window_visible = options[:default][:visible]
-        end
-      else
-        self.visible = options[:force][:visible] unless options[:force][:visible].nil?
+      retain_saved do
+        self.visible = options[:force][:visible].nil? ? @excel.Visible : options[:force][:visible]
+        @excel.calculation = options[:calculation] unless options[:calculation].nil?
+        @ole_workbook.CheckCompatibility = options[:check_compatibility] unless options[:check_compatibility].nil?
       end      
-      @excel.calculation = options[:calculation] unless options[:calculation].nil?
-      @ole_workbook.CheckCompatibility = options[:check_compatibility] unless options[:check_compatibility].nil?
-      @ole_workbook.Saved = true # unless self.Saved # ToDo: this is too hard
     end
            
     # @private
@@ -586,6 +577,7 @@ module RobustExcelOle
     # @option opts [Boolean] :keep_open whether the workbook shall be kept open after unobtrusively opening
     # @return [Workbook] a workbook
     def self.unobtrusively(file, opts = { })
+      opts = process_options(opts, :use_defaults => false)
       opts = {:if_closed => :current,
               :rw_change_excel => :current,
               :keep_open => false}.merge(opts)
@@ -612,12 +604,16 @@ module RobustExcelOle
         book =
           if was_open
             if change_rw_mode
-              open(file, :force => {:excel => opts[:rw_change_excel]}, :read_only => do_not_write)
+              opts = opts.merge({:force => {:excel => opts[:rw_change_excel]}, :read_only => do_not_write})
+              open(file, opts)
+              #open(file, :force => {:excel => opts[:rw_change_excel]}, :read_only => do_not_write)
             else
               book
             end
           else
-            open(file, :force => {:excel => opts[:if_closed]}, :read_only => do_not_write)
+            opts = opts.merge({:force => {:excel => opts[:if_closed]}, :read_only => do_not_write})
+            open(file, opts)
+            #open(file, :force => {:excel => opts[:if_closed]}, :read_only => do_not_write)
           end
         yield book
       ensure
@@ -626,7 +622,9 @@ module RobustExcelOle
           if was_open
             if opts[:rw_change_excel] == book.excel && change_rw_mode
               book.close
-              book = open(file, :force => {:excel => opts[:rw_change_excel]}, :read_only => !was_writable)
+              opts = opts.merge({:force => {:excel => opts[:rw_change_excel]}, :read_only => !was_writable})
+              book = open(file, opts)
+              #book = open(file, :force => {:excel => opts[:rw_change_excel]}, :read_only => !was_writable)
             end
             book.excel.calculation = was_calculation
             book.CheckCompatibility = was_check_compatibility
@@ -681,8 +679,8 @@ module RobustExcelOle
     #               :overwrite -> writes the file, delete the old file
     #               :alert or :excel -> gives control to Excel
     #  :if_obstructed   if a workbook with the same name and different path is already open and blocks the saving, then
-    #                  :raise               -> raises an exception
-    #                  :forget              -> closes the blocking workbook
+    #  or              :raise               -> raises an exception
+    #  :if_blocked     :forget              -> closes the blocking workbook
     #                  :save                -> saves the blocking workbook and closes it
     #                  :close_if_saved      -> closes the blocking workbook, if it is saved,
     #                                          otherwise raises an exception
@@ -692,10 +690,8 @@ module RobustExcelOle
       raise FileNameNotGiven, 'filename is nil' if file.nil?
       raise ObjectNotAlive, 'workbook is not alive' unless alive?
       raise WorkbookReadOnly, 'Not opened for writing (opened with :read_only option)' if @ole_workbook.ReadOnly
-      options = {
-        :if_exists => :raise,
-        :if_obstructed => :raise
-      }.merge(opts)
+      raise(FileNotFound, "file #{General.absolute_path(file).inspect} is a directory") if File.directory?(file)
+      options = self.class.process_options(opts)      
       if File.exist?(file)
         case options[:if_exists]
         when :overwrite
@@ -727,7 +723,7 @@ module RobustExcelOle
         case options[:if_obstructed]
         when :raise
           raise WorkbookBlocked, "blocked by another workbook: #{other_workbook.Fullname.tr('\\','/')}" +
-          "\nHint: Use the option :if_obstructed with values :forget or :save to
+          "\nHint: Use the option :if_blocked with values :forget or :save to
            close or save and close the blocking workbook"
         when :forget
           # nothing
@@ -736,10 +732,10 @@ module RobustExcelOle
         when :close_if_saved
           unless other_workbook.Saved
             raise WorkbookBlocked, "blocking workbook is unsaved: #{File.basename(file).inspect}" +
-            "\nHint: Use option :if_obstructed => :save to save the blocking workbooks"
+            "\nHint: Use option :if_blocked => :save to save the blocking workbooks"
           end
         else
-          raise OptionInvalid, ":if_obstructed: invalid option: #{options[:if_obstructed].inspect}" +
+          raise OptionInvalid, ":if_blocked: invalid option: #{options[:if_obstructed].inspect}" +
           "\nHint: Valid values are :raise, :forget, :save, :close_if_saved"
         end
         other_workbook.Close
@@ -847,7 +843,7 @@ module RobustExcelOle
       after_or_before, base_sheet = opts.to_a.first || [:after, last_sheet_local]
       begin
         if RUBY_PLATFORM !~ /java/
-          if sheet 
+          if sheet
             sheet.Copy({ after_or_before.to_s => base_sheet.ole_worksheet })
           else
             @ole_workbook.Worksheets.Add({ after_or_before.to_s => base_sheet.ole_worksheet })
@@ -882,7 +878,7 @@ module RobustExcelOle
           end
         end
       rescue #WIN32OLERuntimeError 
-        trace "#{$!.message}"
+        #trace "#{$!.message}"
         raise WorksheetREOError, "could not add given worksheet #{sheet.inspect}"
       end
       #ole_sheet = @excel.Activesheet
@@ -997,7 +993,7 @@ module RobustExcelOle
     def visible= visible_value
       return if visible_value.nil?
       @excel.visible = true if visible_value
-      self.window_visible = visible_value
+      self.window_visible = @excel.Visible ? visible_value : true
     end
 
     # returns true, if the window of the workbook is set to visible, false otherwise
