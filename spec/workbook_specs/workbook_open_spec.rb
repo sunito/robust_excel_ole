@@ -45,7 +45,7 @@ describe Workbook do
 
   describe "connecting to unknown workbooks" do
 
-     context "with none workbook" do
+    context "with none workbook" do
 
       it "should open one new Excel with the worbook" do
         book1 = Workbook.open(@simple_file1)
@@ -126,6 +126,7 @@ describe Workbook do
           book.should be_alive
           book.should be_a Workbook
           book.excel.ole_excel.Hwnd.should == @ole_wb.Application.Hwnd
+          Excel.excels_number.should == 1
         end
       end
 
@@ -205,6 +206,7 @@ describe Workbook do
         Workbook.open(@simple_file1) do |book|
           book.filename.should == @simple_file1
           book.excel.ole_excel.Hwnd.should == @ole_wb1.Application.Hwnd
+          Excel.excels_number.should == 2
         end
       end
 
@@ -212,12 +214,11 @@ describe Workbook do
         Workbook.open(@different_file1) do |book|
           book.filename.should == @different_file1
           book.excel.ole_excel.Hwnd.should == @ole_wb2.Application.Hwnd
+          Excel.excels_number.should == 2
         end
       end
 
     end
-
-
 
   end
 
@@ -631,22 +632,22 @@ describe Workbook do
       end
 
       it "should fetch the workbook" do
-        workbook = @book.ole_workbook
-        new_book = Workbook.new(workbook)
+        ole_workbook = @book.ole_workbook
+        new_book = Workbook.new(ole_workbook)
         new_book.should be_a Workbook
         new_book.should be_alive
         new_book.should == @book
         new_book.filename.should == @book.filename
         new_book.excel.should == @book.excel
         new_book.excel.Visible.should be false
-        new_book.excel.DisplayAlerts.should be false
+        #new_book.excel.DisplayAlerts.should be false
         new_book.should === @book
         new_book.close
       end
 
       it "should fetch the workbook" do
-        workbook = @book.ole_workbook
-        new_book = Workbook.new(workbook, :visible => true)
+        ole_workbook = @book.ole_workbook
+        new_book = Workbook.new(ole_workbook, :visible => true)
         new_book.should be_a Workbook
         new_book.should be_alive
         new_book.should == @book
@@ -659,8 +660,8 @@ describe Workbook do
       end
 
       it "should yield an identical Workbook and set visible value" do
-        workbook = @book.ole_workbook
-        new_book = Workbook.new(workbook, :visible => true)
+        ole_workbook = @book.ole_workbook
+        new_book = Workbook.new(ole_workbook, :visible => true)
         new_book.excel.displayalerts = true
         new_book.should be_a Workbook
         new_book.should be_alive
@@ -722,6 +723,26 @@ describe Workbook do
         @book.close
         @book.should_not be_alive
         book2 = Workbook.open(@simple_file1)
+        book2.should === @book
+        book2.should be_alive
+        book2.close
+      end
+
+      it "should yield identical Workbook objects for identical Excel books when reopening with current excel" do
+        @book.should be_alive
+        @book.close
+        @book.should_not be_alive
+        book2 = Workbook.open(@simple_file1, :default => {:excel => :current})
+        book2.should === @book
+        book2.should be_alive
+        book2.close
+      end
+
+      it "should yield identical Workbook objects for identical Excel books when reopening with current excel" do
+        @book.should be_alive
+        @book.close
+        @book.should_not be_alive
+        book2 = Workbook.open(@simple_file1, :force => {:excel => :current})
         book2.should === @book
         book2.should be_alive
         book2.close
@@ -2081,7 +2102,7 @@ describe Workbook do
               if :if_obstructed is :close_if_saved" do
             expect{
               new_book = Workbook.open(@simple_file1, :if_obstructed => :close_if_saved)
-            }.to raise_error(WorkbookBlocked, /workbook with the same name in a different path is unsaved/)
+            }.to raise_error(WorkbookBlocked, /same name in a different path/)
             @book.save
             new_book = Workbook.open(@simple_file1, :if_obstructed => :close_if_saved)
             @book.should_not be_alive

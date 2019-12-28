@@ -78,13 +78,13 @@ module RobustExcelOle
       #ole_xl = current_excel if options[:reuse] == true
       if options[:reuse] == true && ole_xl.nil?
         ole_xl = if RUBY_PLATFORM =~ /java/         
-          excel_instance = known_excel_instance if excel_instance.nil?
+          excel_instance = known_excel_instance 
           excel_instance.ole_excel unless excel_instance.nil?
         else
           current_excel
         end
       end
-      connected = (not ole_xl.nil?)
+      connected = (not ole_xl.nil?) && win32ole_excel.nil?
       ole_xl ||= WIN32OLE.new('Excel.Application')
       hwnd = ole_xl.HWnd
       stored = hwnd2excel(hwnd)
@@ -97,10 +97,10 @@ module RobustExcelOle
         @@hwnd2excel[hwnd] = WeakRef.new(result)
       end
 
-      unless options.is_a? WIN32OLE
+      #unless options.is_a? WIN32OLE
         begin
           reused = options[:reuse] && stored && stored.alive? 
-          if (not reused) && (not connected)
+          unless reused || connected
             options = { :displayalerts => :if_visible, :visible => false, :screenupdating => true }.merge(options)
           end
           result.visible = options[:visible] unless options[:visible].nil? 
@@ -109,7 +109,7 @@ module RobustExcelOle
           result.screenupdating = options[:screenupdating] unless options[:screenupdating].nil?
           #result.created = !reused
         end
-      end
+      #end
       result
     end    
 
@@ -246,8 +246,8 @@ module RobustExcelOle
       end
       begin
         @ole_excel.Workbooks.Close
-      rescue WIN32OLERuntimeError => msg
-        if msg.message =~ /800A03EC/
+      rescue
+        if $!.message =~ /kann nicht zugeordnet werden/ or $!.message =~ /800A03EC/
           raise ExcelREOError, 'user canceled or runtime error'
         else
           raise UnexpectedREOError, "unknown WIN32OLERuntimeError: #{msg.message}"
