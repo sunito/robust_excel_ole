@@ -30,7 +30,7 @@ module RobustExcelOle
           values = RobustExcelOle::Range.new(ole_range).v
           (values.size==1 && values.first.size==1) ? values.first.first : values
         end
-      rescue WIN32OLERuntimeError
+      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException 
         sheet = if self.is_a?(Worksheet) then self
                 elsif self.is_a?(Workbook) then self.sheet(1)
                 elsif self.is_a?(Excel) then self.workbook.sheet(1)
@@ -45,7 +45,7 @@ module RobustExcelOle
             values = RobustExcelOle::Range.new(ole_range).v
             (values.size==1 && values.first.size==1) ? values.first.first : values
           end
-        rescue # WIN32OLERuntimeError
+        rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException 
           return opts[:default] unless opts[:default] == :__not_provided
           raise RangeNotEvaluatable, "cannot evaluate range named #{name.inspect} in #{self}"
         end
@@ -61,18 +61,16 @@ module RobustExcelOle
     # sets the contents of a range
     # @param [String]  name  the name of a range
     # @param [Variant] value the contents of the range
-    # @param [FixNum]  color the color when setting a value
-    # @param [Hash]    opts :color [FixNum]  the color when setting the contents
-    def set_namevalue_glob(name, value, opts = { :color => 0 })
+    def set_namevalue_glob(name, value, opts = { })  # opts is deprecated
       begin
         name_obj = begin
           name_object(name)
         rescue NameNotFound => msg
           raise
-        end
+        end        
         ole_range = name_object(name).RefersToRange
-        ole_range.Interior.ColorIndex = opts[:color]
-        workbook.modified_cells << ole_range if workbook # unless cell_modified?(cell)
+        workbook.color_if_modified = opts[:color] unless opts[:color].nil?
+        ole_range.Interior.ColorIndex = workbook.color_if_modified unless workbook.color_if_modified.nil?
         if RUBY_PLATFORM !~ /java/
           ole_range.Value = value
         else
@@ -85,7 +83,7 @@ module RobustExcelOle
           end
         end
         value
-      rescue # WIN32OLERuntimeError
+      rescue #WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
         raise RangeNotEvaluatable, "cannot assign value to range named #{name.inspect} in #{self.inspect}"
       end
     end
@@ -102,7 +100,7 @@ module RobustExcelOle
       return namevalue_glob(name, opts) if self.is_a?(Workbook)
       begin
         ole_range = self.Range(name)
-      rescue # WIN32OLERuntimeError
+      rescue # WIN32OLERuntimeError, VBAMethodMissingError, Java::OrgRacobCom::ComFailException 
         return opts[:default] unless opts[:default] == :__not_provided
         raise NameNotFound, "name #{name.inspect} not in #{self.inspect}"
       end
@@ -114,7 +112,7 @@ module RobustExcelOle
           values = RobustExcelOle::Range.new(ole_range).v
           (values.size==1 && values.first.size==1) ? values.first.first : values
         end
-      rescue  #WIN32OLERuntimeError
+      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException 
         return opts[:default] unless opts[:default] == :__not_provided
         raise RangeNotEvaluatable, "cannot determine value of range named #{name.inspect} in #{self.inspect}"
       end
@@ -128,19 +126,17 @@ module RobustExcelOle
 
     # assigns a value to a range given a locally defined name
     # @param [String]  name   the name of a range
-    # @param [Variant] value  the assigned value
-    # @param [Hash]    opts :color [FixNum]  the color when setting the contents
-    def set_namevalue(name, value, opts = { :color => 0 })
+    # @param [Variant] value  the assigned value   
+    def set_namevalue(name, value, opts = { })  # opts is deprecated
       begin
-        return set_namevalue_glob(name, value, opts) if self.is_a?(Workbook)
+        return set_namevalue_glob(name, value, opts) if self.is_a?(Workbook)  # opts deprecated
         ole_range = self.Range(name)
-      rescue # WIN32OLERuntimeError
+      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
         raise NameNotFound, "name #{name.inspect} not in #{self.inspect}"
       end
       begin
-        ole_range.Interior.ColorIndex = opts[:color]
-        workbook.modified_cells << ole_range if workbook # unless cell_modified?(range)
-        #range.Value = value
+        workbook.color_if_modified = opts[:color] unless opts[:color].nil?
+        ole_range.Interior.ColorIndex = workbook.color_if_modified unless workbook.color_if_modified.nil?
         if RUBY_PLATFORM !~ /java/
           ole_range.Value = value
         else
@@ -153,7 +149,7 @@ module RobustExcelOle
           end
         end
         value
-      rescue  # WIN32OLERuntimeError
+      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
         raise RangeNotEvaluatable, "cannot assign value to range named #{name.inspect} in #{self.inspect}"
       end
     end
@@ -164,8 +160,8 @@ module RobustExcelOle
     end
 
     # @private
-    def set_nameval(name, value, opts = { :color => 0 })        # :deprecated: #
-      set_namevalue_glob(name, value, opts)
+    def set_nameval(name, value)        # :deprecated: #
+      set_namevalue_glob(name, value)
     end
 
     # @private
@@ -174,8 +170,8 @@ module RobustExcelOle
     end
 
     # @private
-    def set_rangeval(name, value, opts = { :color => 0 })       # :deprecated: #
-      set_namevalue(name, value, opts)
+    def set_rangeval(name, value)       # :deprecated: #
+      set_namevalue(name, value)
     end
 
     # creates a range from a given defined name or address
@@ -203,7 +199,7 @@ module RobustExcelOle
           workbook.save
           range                    
         end
-      rescue WIN32OLERuntimeError
+      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
         address2_string = address2.nil? ? "" : ", #{address2.inspect}"
         raise RangeNotCreated, "cannot create range (#{name_or_address.inspect}#{address2_string})"
       end      
@@ -221,7 +217,7 @@ module RobustExcelOle
       addr = [addr,addr_deprecated] unless addr_deprecated == :__not_provided
       begin       
         self.Names.Add(name, nil, true, nil, nil, nil, nil, nil, nil, '=' + Address.r1c1(addr))
-      rescue # WIN32OLERuntimeError => msg
+      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
         raise RangeNotEvaluatable, "cannot add name #{name.inspect} to range #{addr.inspect}"
       end
       name
@@ -237,12 +233,12 @@ module RobustExcelOle
     def rename_range(name, new_name)
       begin
         item = self.Names.Item(name)
-      rescue WIN32OLERuntimeError
+      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
         raise NameNotFound, "name #{name.inspect} not in #{File.basename(self.stored_filename).inspect}"
       end
       begin
         item.Name = new_name
-      rescue WIN32OLERuntimeError
+      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
         raise UnexpectedREOError, "name error in #{File.basename(self.stored_filename).inspect}"
       end
     end
@@ -253,12 +249,12 @@ module RobustExcelOle
     def delete_name(name)
       begin
         item = self.Names.Item(name)
-      rescue WIN32OLERuntimeError
+      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
         raise NameNotFound, "name #{name.inspect} not in #{File.basename(self.stored_filename).inspect}"
       end
       begin
         item.Delete
-      rescue WIN32OLERuntimeError
+      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
         raise UnexpectedREOError, "name error in #{File.basename(self.stored_filename).inspect}"
       end
     end
@@ -267,10 +263,10 @@ module RobustExcelOle
 
     def name_object(name)
       self.Names.Item(name)
-    rescue #WIN32OLERuntimeError
+    rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
       begin
         self.Parent.Names.Item(name)
-      rescue #WIN32OLERuntimeError
+      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
         raise RobustExcelOle::NameNotFound, "name #{name.inspect} not in #{self.inspect}"
       end
     end

@@ -1,12 +1,19 @@
 = RobustExcelOle
 
-RobustExcelOle helps controlling Excel. It is designed to manage simultaneously running Excel instances, even with simultanously happening user interactions.
+RobustExcelOle helps controlling Excel. 
 This obviously includes standard tasks like reading and writing Excel workbooks.
-RobustExcelOle deals with various cases of Excel (and user) behaviour,
-supplies workarounds for some Excel bugs, and supports referenced libraries.
-It runs on Windows only.
+The gem is designed to manage simultaneously running Excel instances, even with simultanously happening user interactions. 
 
-RobustExcelOle works by sending VBA methods via Win32OLE. It keeps track of Excel instances and Excel workbooks.
+RobustExcelOle deals with various cases of Excel (and user) behaviour, and
+supplies workarounds for some Excel and JRuby bugs. 
+
+It supports handling workbooks across Excel instances by keeping track of workbooks and instances. Conflicts are managed before Excel notices.
+
+Library references are supported.
+
+RobustExcelOle works by sending VBA methods via Win32OLE. 
+Therefore, it runs on Windows only.
+
 
 == Requirements
 
@@ -227,7 +234,9 @@ Without the option +:default+, the workbook can be forced to be opened in the cu
 
   workbook2 = Workbook.open('spec/data/workbook.xls', :excel => excel1)
 
-As a further feature, RobustExcelOle allows processing workbooks, while still supporting user's interactions: The commands enable to open, close, reopen, read, modify, write and save Excel workbooks, without the need of the user's interaction, and even without the user noticing. Thus, while running a script containing RobustExcelOle commands, the user can open and process workbooks in any Excel instances at any time. RobustExcelOle manages the complex cases of conflicts that might occur such that the user does not need to interfere and the script can continue.
+=== Managing conflicts with unsaved and blocking workbooks
+
+RobustExcelOle enables processing workbooks, while still supporting user's interactions: The commands enable to open, close, reopen, read, modify, write and save Excel workbooks, without the need of the user's interaction, and even without the user noticing. Thus, while running a script containing RobustExcelOle commands, the user can open and process workbooks in any Excel instances at any time. RobustExcelOle manages the complex cases of conflicts that might occur such that the user does not need to interfere and the script can continue.
 
 For example, suppose we want to process a list of workbooks. RobustExcelOle allows to rapidly open, manipulate, close and save these workbooks. Now assume, the workbook "workbook.xls" is being processed, while the user has already opened this workbook, has modified but not saved it yet. Excel would prompt a message and ask the user what to do. RobustExcelOle solves this conflict by using an option that states whether the changes of the user should be saved (accepted) or discarded (forgotten) before opening the workbook, e.g.
 
@@ -308,15 +317,6 @@ and set another value to that range.
 
 For more details about reading and writing contents of cells and ranges see {README_ranges}[https://github.com/Thomas008/robust_excel_ole/blob/master/docs/README_ranges.rdoc]
 
-=== Running in jruby
-
-RobustExcelOle runs in jruby as well. You can call the console via the command +jreo+. We implemented workarounds to cope with some restrictions of the library jruby-win32ole. Some issues still remain when running under jruby. So you might consider the following points when running RobustExcelOle under jruby:
-
-1. +Excel.current+ or +Excel.new(:reuse => true)+ does not connect to an already running Excel instance, unless some workbook has been opened via RobustExcelOle. 
-
-2. Use +Excel.kill_all+ instead of +Excel.close_all+. +Excel.close_all does not work yet. It relies on stepping through all heap objects in ObjectSpace. In jruby ObjectSpace is disabled. Each_object will only work with Class.
-
-3. When providing an absolute path, you have to state the "/" ("C:/abc.xls" works, "C:abc" does not work).
 
 === More things
 
@@ -330,6 +330,7 @@ You can run the examples included in the directory +examples+, e.g.
 
   ruby examples\open_save_close\example_unobtrusively.rb
 
+  
 == Development
 
 This project RobustExcelOle is work in progress. We are happy to implement further features. So we invite you to send your pull requests. We then strive to realize them as soon as possible. If you have any feedback, or you find use cases that RobustExcelOle does not satisfy, please let us know.

@@ -97,19 +97,16 @@ module RobustExcelOle
         @@hwnd2excel[hwnd] = WeakRef.new(result)
       end
 
-      #unless options.is_a? WIN32OLE
-        begin
-          reused = options[:reuse] && stored && stored.alive? 
-          unless reused || connected
-            options = { :displayalerts => :if_visible, :visible => false, :screenupdating => true }.merge(options)
-          end
-          result.visible = options[:visible] unless options[:visible].nil? 
-          result.displayalerts = options[:displayalerts] unless options[:displayalerts].nil?
-          result.calculation = options[:calculation] unless options[:calculation].nil?
-          result.screenupdating = options[:screenupdating] unless options[:screenupdating].nil?
-          #result.created = !reused
+      begin
+        reused = options[:reuse] && stored && stored.alive? 
+        unless reused || connected
+          options = { :displayalerts => :if_visible, :visible => false, :screenupdating => true }.merge(options)
         end
-      #end
+        result.visible = options[:visible] unless options[:visible].nil? 
+        result.displayalerts = options[:displayalerts] unless options[:displayalerts].nil?
+        result.calculation = options[:calculation] unless options[:calculation].nil?
+        result.screenupdating = options[:screenupdating] unless options[:screenupdating].nil?
+      end
       result
     end    
 
@@ -188,7 +185,7 @@ module RobustExcelOle
     def ole_workbooks
       ole_workbooks = begin
         @ole_excel.Workbooks
-      rescue WIN32OLERuntimeError => msg
+      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
         if msg.message =~ /failed to get Dispatch Interface/
           raise ExcelDamaged, 'Excel instance not alive or damaged'
         else
@@ -689,7 +686,10 @@ module RobustExcelOle
     # @param [String]  name  the name of the range
     # @param [Variant] value the contents of the range
     def []=(name, value)
-      set_namevalue_glob(name,value, :color => 42) # 42 - aqua-marin, 7-green
+      old_color_if_modified = workbook.color_if_modified
+      workbook.color_if_modified = 42  unless workbook.nil? # aqua-marin
+      set_namevalue_glob(name,value)
+      workbook.color_if_modified = old_color_if_modified
     end
 
     # @private
@@ -724,14 +724,18 @@ module RobustExcelOle
     # @private
     def method_missing(name, *args) 
       if name.to_s[0,1] =~ /[A-Z]/
-        begin
-          raise ObjectNotAlive, 'method missing: Excel not alive' unless alive?
-          @ole_excel.send(name, *args)
-        rescue WIN32OLERuntimeError => msg
-          if msg.message =~ /unknown property or method/
+        raise ObjectNotAlive, 'method missing: Excel not alive' unless alive?
+        if RUBY_PLATFORM =~ /java/  
+          begin
+            @ole_excel.send(name, *args)
+          rescue Java::OrgRacobCom::ComFailException => msg
             raise VBAMethodMissingError, "unknown VBA property or method #{name.inspect}"
-          else
-            raise msg
+          end
+        else
+          begin
+            @ole_excel.send(name, *args)
+          rescue NoMethodError
+            raise VBAMethodMissingError, "unknown VBA property or method #{name.inspect}"
           end
         end
       else

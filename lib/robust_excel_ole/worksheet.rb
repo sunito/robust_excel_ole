@@ -47,8 +47,8 @@ module RobustExcelOle
     # @param [String] new_name the new name of the sheet
     def name= (new_name)
       @ole_worksheet.Name = new_name
-    rescue WIN32OLERuntimeError => msg
-      if msg.message =~ /800A03EC/
+    rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
+      if msg.message =~ /800A03EC/ || msg.message =~ /Visual Basic/
         raise NameAlreadyExists, "sheet name #{new_name.inspect} already exists"
       else
         raise UnexpectedREOError, "unexpected WIN32OLERuntimeError: #{msg.message}"
@@ -87,7 +87,10 @@ module RobustExcelOle
       else
         name, value = p1, p2
         begin
-          set_namevalue_glob(name, value, :color => 42) # aqua-marin, 4-green
+          old_color_if_modified = workbook.color_if_modified
+          workbook.color_if_modified = 42  # aqua-marin
+          set_namevalue_glob(name, value)
+          workbook.color_if_modified = old_color_if_modified
         rescue REOError
           begin
             workbook.set_namevalue_glob(name, value)
@@ -115,12 +118,12 @@ module RobustExcelOle
     # sets the value of a cell, if row, column and color of the cell are given
     # @params [Integer] x,y row and column
     # @option opts [Symbol] :color the color of the cell when set
-    def set_cellval(x,y,value, opts = {:color => 0})
+    def set_cellval(x,y,value, opts = { }) # option opts is deprecated
       cell = @ole_worksheet.Cells.Item(x, y)
-      cell.Interior.ColorIndex = opts[:color] # 42 - aqua-marin, 4-green
-      @workbook.modified_cells << cell if @workbook
+      workbook.color_if_modified = opts[:color] unless opts[:color].nil?
+      cell.Interior.ColorIndex = workbook.color_if_modified unless workbook.color_if_modified.nil?
       cell.Value = value
-    rescue WIN32OLERuntimeError
+    rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
       raise RangeNotEvaluatable, "cannot assign value #{value.inspect} to cell (#{y.inspect},#{x.inspect})"
     end
 
@@ -217,13 +220,17 @@ module RobustExcelOle
     # @private
     def method_missing(name, *args)
       if name.to_s[0,1] =~ /[A-Z]/
-        begin
-          @ole_worksheet.send(name, *args)
-        rescue WIN32OLERuntimeError => msg
-          if msg.message =~ /unknown property or method/
+        if RUBY_PLATFORM =~ /java/  
+          begin
+            @ole_worksheet.send(name, *args)
+          rescue Java::OrgRacobCom::ComFailException 
             raise VBAMethodMissingError, "unknown VBA property or method #{name.inspect}"
-          else
-            raise msg
+          end
+        else
+          begin
+            @ole_worksheet.send(name, *args)
+          rescue NoMethodError 
+            raise VBAMethodMissingError, "unknown VBA property or method #{name.inspect}"
           end
         end
       else

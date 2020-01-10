@@ -14,7 +14,7 @@ module RobustExcelOle
     attr_accessor :excel
     attr_accessor :ole_workbook
     attr_accessor :stored_filename
-    attr_accessor :modified_cells
+    attr_accessor :color_if_modified
     attr_reader :workbook
 
     alias ole_object ole_workbook
@@ -137,7 +137,6 @@ module RobustExcelOle
         ensure_workbook(filename, options)
       end
       bookstore.store(self)
-      @modified_cells = []
       @workbook = @excel.workbook = self
       r1c1_letters = @ole_workbook.Worksheets.Item(1).Cells.Item(1,1).Address(true,true,XlR1C1).gsub(/[0-9]/,'') #('ReferenceStyle' => XlR1C1).gsub(/[0-9]/,'')
       address_class.new(r1c1_letters)
@@ -296,7 +295,7 @@ module RobustExcelOle
         empty_ole_workbook = excel.Workbooks.Item(excel.Workbooks.Count)
         begin
           empty_ole_workbook.SaveAs(abs_filename)
-        rescue # WIN32OLERuntimeError => msg
+        rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
           raise FileNotFound, "could not save workbook with filename #{filename.inspect}"
         end
       else
@@ -398,8 +397,8 @@ module RobustExcelOle
         abs_filename = General.absolute_path(filename)
         begin
           workbooks = @excel.Workbooks
-        rescue WIN32OLERuntimeError => msg
-          raise UnexpectedREOError, "WIN32OLERuntimeError: #{msg.message} #{msg.backtrace}"
+        rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
+          raise UnexpectedREOError, "cannot access workbooks: #{msg.message} #{msg.backtrace}"
         end
         begin
           with_workaround_linked_workbooks_excel2007(options) do
@@ -411,7 +410,7 @@ module RobustExcelOle
         rescue WIN32OLERuntimeError => msg
           # for Excel2007: for option :if_unsaved => :alert and user cancels: this error appears?
           # if yes: distinguish these events
-          raise UnexpectedREOError, "WIN32OLERuntimeError: #{msg.message} #{msg.backtrace}"
+          raise UnexpectedREOError, "cannot open workbook: #{msg.message} #{msg.backtrace}"
         end
         begin
           # workaround for bug in Excel 2010: workbook.Open does not always return the workbook when given file name
@@ -599,7 +598,6 @@ module RobustExcelOle
             if change_rw_mode
               opts = opts.merge({:force => {:excel => opts[:rw_change_excel]}, :read_only => do_not_write})
               open(file, opts)
-              #open(file, :force => {:excel => opts[:rw_change_excel]}, :read_only => do_not_write)
             else
               book
             end
@@ -637,9 +635,8 @@ module RobustExcelOle
     end
 
     # simple save of a workbook.
-    # @option opts [Boolean] :discoloring  states, whether colored ranges shall be discolored
     # @return [Boolean] true, if successfully saved, nil otherwise
-    def save(opts = {:discoloring => false})
+    def save(opts = { })  # option opts is deprecated #
       raise ObjectNotAlive, 'workbook is not alive' unless alive?
       raise WorkbookReadOnly, 'Not opened for writing (opened with :read_only option)' if @ole_workbook.ReadOnly   
       # if you have open the workbook with :read_only => true,
@@ -647,10 +644,8 @@ module RobustExcelOle
       # otherwise the workbook may already be open writable in an another Excel instance
       # then you could use this workbook or close the workbook there
       begin
-        discoloring if opts[:discoloring]
-        @modified_cells = []
         @ole_workbook.Save
-      rescue WIN32OLERuntimeError => msg
+      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
         if msg.message =~ /SaveAs/ && msg.message =~ /Workbook/
           raise WorkbookNotSaved, 'workbook not saved'
         else
@@ -675,8 +670,7 @@ module RobustExcelOle
     #  :if_blocked     :forget              -> closes the blocking workbook
     #                  :save                -> saves the blocking workbook and closes it
     #                  :close_if_saved      -> closes the blocking workbook, if it is saved,
-    #                                          otherwise raises an exception
-    # :discoloring     states, whether colored ranges shall be discolored
+    #                                          otherwise raises an exception   
     # @return [Workbook], the book itself, if successfully saved, raises an exception otherwise
     def save_as(file, opts = { })
       raise FileNameNotGiven, 'filename is nil' if file.nil?
@@ -688,7 +682,7 @@ module RobustExcelOle
         case options[:if_exists]
         when :overwrite
           if file == self.filename
-            save({:discoloring => opts[:discoloring]})
+            save
             return self
           else
             begin
@@ -734,14 +728,9 @@ module RobustExcelOle
       end
       save_as_workbook(file, options)
       self
-    end
+    end    
 
   private
-
-    # @private
-    def discoloring
-      @modified_cells.each { |cell| cell.Interior.ColorIndex = XlNone }
-    end
 
     # @private
     def save_as_workbook(file, options)  
@@ -752,11 +741,9 @@ module RobustExcelOle
         when '.xlsx' then RobustExcelOle::XlOpenXMLWorkbook
         when '.xlsm' then RobustExcelOle::XlOpenXMLWorkbookMacroEnabled
         end
-      discoloring if options[:discoloring]
-      @modified_cells = []
       @ole_workbook.SaveAs(General.absolute_path(file), file_format)
       bookstore.store(self)
-    rescue WIN32OLERuntimeError => msg
+    rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
       if msg.message =~ /SaveAs/ && msg.message =~ /Workbook/
         # trace "save: canceled by user" if options[:if_exists] == :alert || options[:if_exists] == :excel
         # another possible semantics. raise WorkbookREOError, "could not save Workbook"
@@ -799,7 +786,7 @@ module RobustExcelOle
     # @returns [Worksheet]
     def sheet(name)
       worksheet_class.new(@ole_workbook.Worksheets.Item(name))
-    rescue WIN32OLERuntimeError => msg
+    rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
       raise NameNotFound, "could not return a sheet with name #{name.inspect}"
     end
 
@@ -869,8 +856,7 @@ module RobustExcelOle
             end
           end
         end
-      rescue #WIN32OLERuntimeError 
-        #trace "#{$!.message}"
+      rescue WIN32OLERuntimeError, NameNotFound, Java::OrgRacobCom::ComFailException
         raise WorksheetREOError, "could not add given worksheet #{sheet.inspect}"
       end
       #ole_sheet = @excel.Activesheet
@@ -910,7 +896,10 @@ module RobustExcelOle
     # @param [String]  name  the name of the range
     # @param [Variant] value the contents of the range
     def []= (name, value)
-      set_namevalue_glob(name,value, :color => 42)   # 42 - aqua-marin, 4-green
+      old_color_if_modified = @color_if_modified
+      workbook.color_if_modified = 42  # 42 - aqua-marin, 4-green
+      set_namevalue_glob(name,value)   
+      workbook.color_if_modified = old_color_if_modified
     end
 
     # sets options
@@ -1082,14 +1071,39 @@ module RobustExcelOle
 
   private
 
+    def method_missing(name, *args) 
+      if name.to_s[0,1] =~ /[A-Z]/
+        raise ObjectNotAlive, 'method missing: workbook not alive' unless alive?
+        if RUBY_PLATFORM =~ /java/  
+          begin
+            @ole_workbook.send(name, *args)
+          rescue Java::OrgRacobCom::ComFailException 
+            raise VBAMethodMissingError, "unknown VBA property or method #{name.inspect}"
+          end
+        else
+          begin
+            @ole_workbook.send(name, *args)
+          rescue NoMethodError 
+            raise VBAMethodMissingError, "unknown VBA property or method #{name.inspect}"
+          end
+        end
+      else
+        super
+      end
+    end
+
+  end
+
+
+=begin
     # @private
     def method_missing(name, *args)   
       if name.to_s[0,1] =~ /[A-Z]/
         begin
           raise ObjectNotAlive, 'method missing: workbook not alive' unless alive?
           @ole_workbook.send(name, *args)
-        rescue WIN32OLERuntimeError => msg
-          if msg.message =~ /unknown property or method/
+        rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
+          if msg.message =~ /unknown property or method/ || msg.message =~ /map name/
             raise VBAMethodMissingError, "unknown VBA property or method #{name.inspect}"
           else
             raise msg
@@ -1100,6 +1114,7 @@ module RobustExcelOle
       end
     end
   end
+=end
 
 public
 
