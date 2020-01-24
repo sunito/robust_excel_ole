@@ -123,7 +123,7 @@ module RobustExcelOle
       workbook.color_if_modified = opts[:color] unless opts[:color].nil?
       cell.Interior.ColorIndex = workbook.color_if_modified unless workbook.color_if_modified.nil?
       cell.Value = value
-    rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
+    rescue # WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
       raise RangeNotEvaluatable, "cannot assign value #{value.inspect} to cell (#{y.inspect},#{x.inspect})"
     end
 
@@ -220,7 +220,7 @@ module RobustExcelOle
     # @private
     def method_missing(name, *args)
       if name.to_s[0,1] =~ /[A-Z]/
-        if RUBY_PLATFORM =~ /java/  
+        if JRUBY_BUG_ERRORMESSAGE 
           begin
             @ole_worksheet.send(name, *args)
           rescue Java::OrgRacobCom::ComFailException 

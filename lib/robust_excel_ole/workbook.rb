@@ -22,16 +22,15 @@ module RobustExcelOle
     DEFAULT_OPEN_OPTS = {
       :default => {:excel => :current},
       :force => {},
+      :update_links => :never,
       :if_unsaved    => :raise,
       :if_obstructed => :raise,
       :if_absent     => :raise,
-      #:read_only => false,
-      :check_compatibility => false,
-      :update_links => :never,
-      :if_exists => :raise
+      :if_exists => :raise,
+      :check_compatibility => false
     }.freeze
 
-    CORE_DEFAULT_OPTEN_OPTS = {
+    CORE_DEFAULT_OPEN_OPTS = {
       :default => {:excel => :current}, :force => {}, :update_links => :never
     }.freeze
 
@@ -83,16 +82,22 @@ module RobustExcelOle
     # :check_compatibility  true -> check compatibility when saving
     # :update_links         true -> user is being asked how to update links, false -> links are never updated
     # @return [Workbook] a representation of a workbook
-    def self.open(file, opts = { }, &block)
-      raise(FileNameNotGiven, 'filename is nil') if file.nil?
-      raise(FileNotFound, "file #{General.absolute_path(file).inspect} is a directory") if File.directory?(file)
-      options = process_options(opts, :use_defaults => false)
+    def self.new(file_or_workbook, opts = { }, &block)
+      options = process_options(opts)
+      if file_or_workbook.is_a? WIN32OLE
+        file = file_or_workbook.Fullname.tr('\\','/') 
+      else
+        file = file_or_workbook
+        raise(FileNameNotGiven, 'filename is nil') if file.nil?
+        raise(FileNotFound, "file #{General.absolute_path(file).inspect} is a directory") if File.directory?(file)
+      end
+      # try to fetch the workbook from the bookstore
       book = nil
       if options[:force][:excel] != :new
         # if readonly is true, then prefer a book that is given in force_excel if this option is set              
         forced_excel = 
           (options[:force][:excel].nil? || options[:force][:excel] == :current) ? 
-            (excel_class.new(:reuse => true) if RUBY_PLATFORM !~ /java/) : excel_of(options[:force][:excel])              
+            (excel_class.new(:reuse => true) if !JRUBY_BUG_CONNECT) : excel_of(options[:force][:excel])              
         begin
           book = if File.exists?(file)
             bookstore.fetch(file, :prefer_writable => !(options[:read_only]),
@@ -108,13 +113,18 @@ module RobustExcelOle
             !(book.alive? && !book.saved && (options[:if_unsaved] != :accept))
             options[:force][:excel] = book.excel if book.excel && book.excel.alive?
             book.ensure_workbook(file,options)
+            book.set_options(file,options)
             return book
           end
         end
-      end
-      new(file, options, &block)
+      end        
+      super(file_or_workbook, options, &block)
     end
-    
+
+    def self.open(file_or_workbook, opts = { }, &block)
+      new(file_or_workbook, opts, &block)
+    end
+
     # creates a new Workbook object, if a file name is given
     # Promotes the win32ole workbook to a Workbook object, if a win32ole-workbook is given
     # @param [Variant] file_or_workbook  file name or workbook
@@ -122,20 +132,20 @@ module RobustExcelOle
     # @option opts [Symbol] see above
     # @return [Workbook] a workbook
     def initialize(file_or_workbook, options = { }, &block)
-      options = self.class.process_options(options)
-      if file_or_workbook.is_a? WIN32OLE        
-        workbook = file_or_workbook
-        @ole_workbook = workbook
-        # use the Excel instance where the workbook is opened
-        ole_excel = WIN32OLE.connect(workbook.Fullname).Application rescue nil
+      if file_or_workbook.is_a? WIN32OLE
+        @ole_workbook = file_or_workbook
+        ole_excel = begin
+          WIN32OLE.connect(@ole_workbook.Fullname).Application
+        rescue
+          raise ExcelREOError, 'could not determine the Excel instance'
+        end
         @excel = excel_class.new(ole_excel)
-        filename = @ole_workbook.Fullname.tr('\\','/')
-        set_options(filename, options)
+        filename = file_or_workbook.Fullname.tr('\\','/') 
       else
-        filename = file_or_workbook    
-        #ensure_excel(options) #unless RUBY_PLATFORM =~ /java/ && (options[:force][:excel].nil? || options[:force][:excel] == :current)            
-        ensure_workbook(filename, options)
-      end
+        filename = file_or_workbook            
+        ensure_workbook(filename, options)        
+      end      
+      set_options(filename, options)
       bookstore.store(self)
       @workbook = @excel.workbook = self
       r1c1_letters = @ole_workbook.Worksheets.Item(1).Cells.Item(1,1).Address(true,true,XlR1C1).gsub(/[0-9]/,'') #('ReferenceStyle' => XlR1C1).gsub(/[0-9]/,'')
@@ -148,7 +158,7 @@ module RobustExcelOle
         end
       end
     end
-
+ 
   private    
 
     # translates abbreviations and synonyms and merges with default options
@@ -180,7 +190,7 @@ module RobustExcelOle
         erg
       end
       opts = translator.call(options)
-      default_open_opts = proc_opts[:use_defaults] ? DEFAULT_OPEN_OPTS : CORE_DEFAULT_OPTEN_OPTS        
+      default_open_opts = proc_opts[:use_defaults] ? DEFAULT_OPEN_OPTS : CORE_DEFAULT_OPEN_OPTS        
       default_opts = translator.call(default_open_opts)
       opts = default_opts.merge(opts)
       opts[:default] = default_opts[:default].merge(opts[:default]) unless opts[:default].nil?
@@ -209,53 +219,51 @@ module RobustExcelOle
       @excel = if excel_option == :new
         excel_class.new(:reuse => false) 
       elsif excel_option.nil? || excel_option == :current
-        excel_class.new(:reuse => true) # unless RUBY_PLATFORM =~ /java/
-      else  #elsif excel_options.is_a?(WIN32OLE) || excel_option.is_a?(Excel) #excel_option.respond_to?(:Hwnd)
+        excel_class.new(:reuse => true)
+      else
         self.class.excel_of(excel_option)
       end
       raise ExcelREOError, "excel is not alive" unless @excel && @excel.alive?
     end
 
-    # @private
-    # restriction for jruby: does not manage conflicts with blocking or unsaved workbooks
+    # @private    
     def ensure_workbook(filename, options)  
-      if options[:if_unsaved]==:accept && options[:read_only]==true
-        raise OptionInvalid, ":if_unsaved:accept and :read_only:true not possible"
+      if options[:if_unsaved]==:accept && 
+        ((options[:read_only]==true && self.ReadOnly==false) || (options[:read_only]==false && self.ReadOnly==true))
+        raise OptionInvalid, ":if_unsaved:accept and change of read-only mode is not possible"
       end
       unless @ole_workbook && alive?
         filename = @stored_filename ? @stored_filename : filename 
         manage_nonexisting_file(filename,options)
-        excel_option = options[:force][:excel].nil? ? options[:default][:excel] : options[:force][:excel]
-        if RUBY_PLATFORM =~ /java/ && 
-          (excel_option.nil? || excel_option == :current) && filename[0] != '/'
-          begin
-            connect(filename,options)
-          rescue WorkbookConnectingUnsavedError
-            raise WorkbookNotSaved, "workbook is already open but not saved: #{File.basename(filename).inspect}"
-          rescue WorkbookConnectingBlockingError
-            raise WorkbookBlocked, "can't open workbook #{filename}"+
-              "\nbecause it is being blocked by a workbook with the same name in a different path."
-          rescue WorkbookConnectingUnknownError
-            raise WorkbookREOError, "can't connect to workbook #{filename}"
-          end
-          manage_unsaved_workbook(filename,options) unless @ole_workbook.Saved
+        excel_option = options[:force][:excel].nil? ? options[:default][:excel] : options[:force][:excel]        
+        ensure_excel(options)
+        workbooks = @excel.Workbooks
+        @ole_workbook = workbooks.Item(File.basename(filename)) rescue nil if @ole_workbook.nil?
+        if @ole_workbook
+          manage_blocking_or_unsaved_workbook(filename,options)
         else
-          ensure_excel(options)
-          workbooks = @excel.Workbooks
-          @ole_workbook = workbooks.Item(File.basename(filename)) rescue nil if @ole_workbook.nil?
-          if @ole_workbook
-            manage_blocking_or_unsaved_workbook(filename,options)
-          else
-            if excel_option.nil? || excel_option == :current && 
-              (RUBY_PLATFORM !~ /java/ || filename[0] != '/')
-              connect(filename,options)
-            else 
-              open_or_create_workbook(filename,options)
-            end
-          end       
-        end
+          if excel_option.nil? || excel_option == :current &&  
+            (!JRUBY_BUG_CONNECT || filename[0] != '/')
+            connect(filename,options)
+          else 
+            open_or_create_workbook(filename,options)
+          end
+        end       
       end
-      set_options(filename, options)
+    end
+
+    # @private
+    def set_options(filename, options)
+      if (!options[:read_only].nil?) && options[:read_only] != @ole_workbook.ReadOnly
+        @excel.with_displayalerts(false) { @ole_workbook.Close }
+        @ole_workbook = nil        
+        open_or_create_workbook(filename, options)
+      end
+      retain_saved do
+        self.visible = options[:force][:visible].nil? ? @excel.Visible : options[:force][:visible]
+        @excel.calculation = options[:calculation] unless options[:calculation].nil?
+        @ole_workbook.CheckCompatibility = options[:check_compatibility] unless options[:check_compatibility].nil?
+      end
     end
 
   private
@@ -286,7 +294,7 @@ module RobustExcelOle
     end
 
     # @private
-    def manage_nonexisting_file(filename,options)      
+    def manage_nonexisting_file(filename,options)   
       return if File.exist?(filename)
       abs_filename = General.absolute_path(filename)
       if options[:if_absent] == :create
@@ -423,21 +431,7 @@ module RobustExcelOle
           raise UnexpectedREOError, "WIN32OLERuntimeError: #{msg.message} #{msg.backtrace}"
         end
       end
-    end
-
-    # @private
-    def set_options(filename, options)
-      if (!options[:read_only].nil?) && options[:read_only] != @ole_workbook.ReadOnly
-        @excel.with_displayalerts(false) { @ole_workbook.Close }
-        @ole_workbook = nil        
-        open_or_create_workbook(filename, options)
-      end
-      retain_saved do
-        self.visible = options[:force][:visible].nil? ? @excel.Visible : options[:force][:visible]
-        @excel.calculation = options[:calculation] unless options[:calculation].nil?
-        @ole_workbook.CheckCompatibility = options[:check_compatibility] unless options[:check_compatibility].nil?
-      end      
-    end
+    end    
            
     # @private
     # translating the option UpdateLinks from REO to VBA
@@ -604,7 +598,6 @@ module RobustExcelOle
           else
             opts = opts.merge({:force => {:excel => opts[:if_closed]}, :read_only => do_not_write})
             open(file, opts)
-            #open(file, :force => {:excel => opts[:if_closed]}, :read_only => do_not_write)
           end
         yield book
       ensure
@@ -821,7 +814,7 @@ module RobustExcelOle
       last_sheet_local = last_sheet
       after_or_before, base_sheet = opts.to_a.first || [:after, last_sheet_local]
       begin
-        if RUBY_PLATFORM !~ /java/
+        if !JRUBY_BUG_COPYSHEETS
           if sheet
             sheet.Copy({ after_or_before.to_s => base_sheet.ole_worksheet })
           else
@@ -829,7 +822,6 @@ module RobustExcelOle
             #@ole_workbook.Worksheets.Item(ole_workbook.Worksheets.Count).Activate
           end
         else
-          # workaround for jruby      
           if after_or_before == :before 
             if sheet
               sheet.Copy(base_sheet.ole_worksheet)
@@ -990,7 +982,7 @@ module RobustExcelOle
       end
     end
 
-    # @return [Boolean] true, if the full book names and excel Instances are identical, false otherwise
+    # @return [Boolean] true, if the full workbook names and excel Instances are identical, false otherwise
     def == other_book
       other_book.is_a?(Workbook) &&
         @excel == other_book.excel &&
@@ -1074,7 +1066,7 @@ module RobustExcelOle
     def method_missing(name, *args) 
       if name.to_s[0,1] =~ /[A-Z]/
         raise ObjectNotAlive, 'method missing: workbook not alive' unless alive?
-        if RUBY_PLATFORM =~ /java/  
+        if JRUBY_BUG_ERRORMESSAGE 
           begin
             @ole_workbook.send(name, *args)
           rescue Java::OrgRacobCom::ComFailException 
@@ -1093,28 +1085,6 @@ module RobustExcelOle
     end
 
   end
-
-
-=begin
-    # @private
-    def method_missing(name, *args)   
-      if name.to_s[0,1] =~ /[A-Z]/
-        begin
-          raise ObjectNotAlive, 'method missing: workbook not alive' unless alive?
-          @ole_workbook.send(name, *args)
-        rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
-          if msg.message =~ /unknown property or method/ || msg.message =~ /map name/
-            raise VBAMethodMissingError, "unknown VBA property or method #{name.inspect}"
-          else
-            raise msg
-          end
-        end
-      else
-        super
-      end
-    end
-  end
-=end
 
 public
 

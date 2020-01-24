@@ -43,6 +43,30 @@ describe Workbook do
     rm_tmp(@dir)
   end
 
+  describe "open and new" do
+
+    context "with standard" do
+
+      before do
+        @book1 = Workbook.new(@simple_file1)
+      end
+
+      it "should yield identical Workbook objects for a file name" do
+        book2 = Workbook.open(@simple_file1)
+        book2.equal?(@book1).should be true
+      end
+
+      it "should yield identical Workbook objects for a win32ole-workbook" do
+        ole_workbook1 = @book1.ole_workbook
+        book2 = Workbook.new(ole_workbook1)
+        book3 = Workbook.open(ole_workbook1)
+        book3.equal?(book2).should be true
+      end
+
+    end
+
+  end
+
   describe "connecting to unknown workbooks" do
 
     context "with none workbook" do
@@ -1999,7 +2023,7 @@ describe Workbook do
 
         it "should open the new book and close the unsaved book, if user answers 'yes'" do
           # "Yes" is the  default. --> language independent
-          #@key_sender.puts "{enter}"
+          @key_sender.puts "{enter}"
           @new_book = Workbook.open(@simple_file1, :if_unsaved => :alert)
           @new_book.should be_alive
           @new_book.filename.downcase.should == @simple_file1.downcase
@@ -2269,7 +2293,7 @@ describe Workbook do
 
     context "with :read_only" do
       
-      it "should not reopen the book with writable" do
+      it "should raise error, when :if_unsaved => :accept and change readonly to false" do
         book = Workbook.open(@simple_file1, :read_only => true)
         book.ReadOnly.should be true
         book.should be_alive
@@ -2277,11 +2301,22 @@ describe Workbook do
         old_cell_value = sheet[1,1].Value
         sheet[1,1] = sheet[1,1].Value == "foo" ? "bar" : "foo"
         book.Saved.should be false
-        new_book = Workbook.open(@simple_file1, :read_only => false, :if_unsaved => :accept)
-        new_book.ReadOnly.should be false 
-        new_book.should be_alive
-        book.should be_alive   
-        new_book.should == book         
+        expect{
+          new_book = Workbook.open(@simple_file1, :read_only => false, :if_unsaved => :accept)
+        }.to raise_error(OptionInvalid)
+      end
+
+      it "should raise error, when :if_unsaved => :accept and change readonly to false" do
+        book = Workbook.open(@simple_file1, :read_only => false)
+        book.ReadOnly.should be false
+        book.should be_alive
+        sheet = book.sheet(1)
+        old_cell_value = sheet[1,1].Value
+        sheet[1,1] = sheet[1,1].Value == "foo" ? "bar" : "foo"
+        book.Saved.should be false
+        expect{
+          new_book = Workbook.open(@simple_file1, :read_only => true, :if_unsaved => :accept)
+        }.to raise_error(OptionInvalid)
       end
 
       it "should not reopen the book with writable" do
