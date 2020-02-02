@@ -2,9 +2,9 @@
 
 === Opening a workbook.
 
-If you want to open a workbook, use
+If you want to open a workbook, you can use the methods +open+ or +new+.
   
-  book = Workbook.open('spec/data/workbook.xls')
+  workbook = Workbook.open('spec/data/workbook.xls')
 
 Once you have got an Workbook object, you can apply all VBA methods that you would apply to a VBA Workbook object
 (see https://docs.microsoft.com/en-us/office/vba/api/excel.workbook#methods).
@@ -46,7 +46,7 @@ You can use the following abbreviations or synonyms: +:f+ for  +:force+, +:d+ fo
 
 The option +:excel+ :
 
-Valid values are : +:current+ (or +:active+ or +:reuse+), +:new+, +:reserved_new+, or a given Excel instance (default: +:current).
+Valid values are : +:current+ (or +:active+ or +:reuse+), +:new+, or a given Excel instance (default: +:current).
 
 The option +:if_unsaved+  : 
 
@@ -80,32 +80,28 @@ Here are a few examples:
 
 If you want to open a workbook that was not opened before, or reopen a workbook that was open in an Excel instance that is now closed, in the current (active) Excel instance, then use
 
-  book = Workbook.open('spec/data/workbook.xls', :default => {:excel => :current})
+  workbook = Workbook.open('spec/data/workbook.xls', :default => {:excel => :current})
 
 or
   
-  book = Workbook.open('spec/data/workbook.xls')
+  workbook = Workbook.open('spec/data/workbook.xls')
 
 In case you want to open such a workbook in a new Excel instance, then use
 
-  book = Workbook.open('spec/data/workbook.xls', :default => {:excel => :new})
-
-You can also open the workbook in a separate, reserved Excel instance.
-
-  book = Workbook.open('spec/data/workbook.xls', :default => {:excel => :reserved_new})
+  workbook = Workbook.open('spec/data/workbook.xls', :default => {:excel => :new})
 
 If you want to open a workbook in a new Excel instance, no matter if it was opened before, you can write
 
-  book = Workbook.open('spec/data/workbook.xls', :force => {:excel => :new})
+  workbook = Workbook.open('spec/data/workbook.xls', :force => {:excel => :new})
 
 For simplicity, you can also leave out the +:force+ option (but not the +:default+ option).
 
-  book = Workbook.open('spec/data/workbook.xls', :excel => :new)
+  workbook = Workbook.open('spec/data/workbook.xls', :excel => :new)
 
 You can also specify an Excel instance
 
   excel1 = Excel.create
-  book = Workbook.open('spec/data/workbook.xls', :excel => excel1)
+  workbook = Workbook.open('spec/data/workbook.xls', :excel => excel1)
 
 If you want to open the workbook and make its window visible, then use
 
@@ -114,21 +110,23 @@ If you want to open the workbook and make its window visible, then use
 Notice, that when the workbook is visible, the DisplayAlerts of the respective Excel instance is true, if not explicitely DisplayAlerts is set to false in this Excel instance.
 You can combine options, e.g. 
 
-  book = Workbook.open('spec/data/workbook.xls', :excel => :new, :visible => true, :default => {:excel => excel1})
+  workbook = Workbook.open('spec/data/workbook.xls', :visible => true, :default => {:excel => excel1})
 
 You can use the abbreviations, e.g. in this case
 
-  book = Workbook.open('spec/data/workbook.xls', :e => :new, :v => true, :d => {:e => excel1})  
+  workbook = Workbook.open('spec/data/workbook.xls', :v => true, :d => {:e => excel1})  
 
 If a workbook contains unsaved changes and a workbook with the same filename shall be opened, then the option +:if_unsaved+ manages this conflict. For example, if the workbook with the unsaved changes shall remain open, you can use
 
-  book = Workbook.open('spec/data/workbook.xls', :if_unsaved => :accept)
+  workbook = Workbook.open('spec/data/workbook.xls', :if_unsaved => :accept)
 
 If a workbook is open and a workbook with the same name but in different path shall be opened, i.e. the first workbook blocks opening the other workbook, then the option +:if_blocked+ handles this situation, e.g.
 
-  book = Workbook.open('path/workbook.xls', :if_blocked => :forget)
+  workbook = Workbook.open('path/workbook.xls', :if_blocked => :forget)
 
 Remarks:
+
+The methods +open+ and +new+ connect to workbooks opened outside of RobustExcelOle as well.
 
 Opening linked workbooks for EXCEL 2007 is supported
 
@@ -138,23 +136,42 @@ Doing updating links seems to be dependent on calculation mode: updates happen, 
 
 A special feature of RobustExcelOle is that it allows to reopen workbooks after closing them.
 
-  book = Workbook.open('spec/data/workbook.xls')
-  book.close
-  book.reopen
+  workbook = Workbook.open('spec/data/workbook.xls')
+  workbook.close
+  workbook.reopen
 
 The closed workbook is now alive again, i.e. is open and responds to Excel methods.
 
-Technically, this feature is implemented in such way, that a Workbook object is a proxy of an Excel workbook. A Workbook object is defined by the full workbook name and the Excel instance in which it is opened. RobustExcelOle ensures identity transparency which means that the same Workbook objects refer to the same workbooks, and vice versa.
+=== Promoting WIN32OLE objects to RobustExcelOle objects
 
-=== Promoting a workbook to a Workbook object
+Promoting means here: enriching a given object of a certain class by properties and methods of another class. 
+The method +General.to_reo+ enables promoting WIN32OLE objects to RobustExcelOle objects such that the attributes and methods of RobustExcelOle can be applied to these objects. For example, assume we have a WIN32OLE workbook +win32ole_workbook+:
 
-A Workbook object can be created when giving an Excel workbook.
+  win32ole_workbook.to_class
+  => WIN32OLE
 
-   book = Workbook.new(win32ole_workbook)
+This object can be promoted to a RobustExcelOle workbook.
 
-Note that only a restricted number of options can be considered, e.g. +:visible+
+  workbook = win32ole_workbook.to_reo
+  workbook.to_class
+  => RobustExcelOle::Workbook
 
-   book = Workbook.new(win32ole_workbook, :visible => true)
+Similarly, Excel, Worksheet, and Range WIN32OLE objects can be promoted to corresponding RobustExcelOle objects. 
+
+The method +to_reo+ uses the method +new+. You can apply the method +new+ directly.
+
+  workbook = Workbook.new(win32ole_workbook)
+
+You can supply options, e.g. +:visible+.
+
+   workbook = Workbook.new(win32ole_workbook, :visible => true) 
+
+
+=== Identity transperence ===
+
+A RobustExcelOle Workbook object is a proxy of an Excel WIN32OLE workbook. A Workbook object is defined by the full workbook name and the Excel instance in which it is opened. RobustExcelOle ensures identity transparency which means that identical Workbook objects refer to identical Excel workbooks, and vice versa. Identity transperence ensures that, no matter how a Workbook object was created - by filename or by promoting an Excel workbook - two Workbook objects are identical, if and only if the Excel workbooks, they are referring to, are identical. 
+
+Similarly, each Excel, Worksheet and a Range object in RobustExcelOle is a proxy of a corresponding Excel, Worksheet and a Range object in WIN32OLE. For these objects identity transperence holds as well.
 
 === Unobtrusively modifying a workbook
 
@@ -176,26 +193,26 @@ Options are the following:
 
   Workbook.unobtrusively('spec/data/workbook.xls') do |book|
     # some modification
-    sheet = book[0]
-    sheet[1,1] = "c" 
+    worksheet = book[0]
+    worksheet[1,1] = "c" 
   end
   
 The methods +for_reading+ and +for_modifying+ indicate unobtrusively reading or modifying.
 
   Workbook.for_modifying('spec/data/workbook.xls') do |book|
     # some modification
-    sheet = book[0]
-    sheet[1,1] = "c" 
+    worksheet = book[0]
+    worksheet[1,1] = "c" 
   end
 
-Note, that the methods +unobtrusively+, +for_reading+ and +for_modifying+ work not only for workbooks opened via RobustExcelOle, but do also connect to workbooks opened outside RobustExcelOle.
+Note, that the methods +unobtrusively+, +for_reading+ and +for_modifying+ work not only for workbooks opened via RobustExcelOle, but connect to workbooks opened outside RobustExcelOle as well.
 
 === Retaining the saved-status
 
 This method ensures keeping the save status of the workbook
 
-  book = Workbook.open('spec/data/workbook.xls')
-  book.retain_saved do
+  workbook = Workbook.open('spec/data/workbook.xls')
+  workbook.retain_saved do
     # some reading or modifying
   end
 
@@ -203,7 +220,7 @@ This method ensures keeping the save status of the workbook
 
 This method finds out whether the Excel workbook that is referenced by the Workbook object responds to methods.
 
-  book.alive?
+  workbook.alive?
   # => true
 
 == Code
