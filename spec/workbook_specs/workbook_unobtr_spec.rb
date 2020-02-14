@@ -80,6 +80,335 @@ describe Workbook do
 
     end
 
+    describe "unknown workbooks" do
+
+      context "with one invisible saved writable workbook" do
+
+        before do
+          @ole_e1 = WIN32OLE.new('Excel.Application')
+          ws = @ole_e1.Workbooks
+          @abs_filename = General.absolute_path(@simple_file1)
+          @ole_wb = ws.Open(abs_filename)
+          @old_value = @ole_wb.Worksheets.Item(1).Cells.Item(1,1).Value
+        end
+
+        it "should connect" do
+          Workbooks.unobtrusively(@simple_file1) do |book|
+            book.excel.Workbook.Count.should == 1
+            Excel.excels_number.should == 1
+            book.FullName.should == General.absolute_path(@simple_file1)
+            book.saved.should be true
+            book.visible.should be false
+            book.writable.should be true
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be true
+          @ole_e1.Visible.should be false
+          ole_wb.ReadOnly.should be false
+        end
+
+        it "should set visible => true and remain invisiblity" do
+          Workbooks.unobtrusively(@simple_file1, :visible => true) do |book|
+            book.saved.should be true
+            book.visible.should be true
+            book.writable.should be true
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be true
+          @ole_e1.Visible.should be false
+          ole_wb.ReadOnly.should be false
+        end
+
+        it "should set read_only => true and remain writability" do
+          Workbooks.unobtrusively(@simple_file1, :read_only => true) do |book|
+            book.saved.should be true
+            book.visible.should be false
+            book.writable.should be false
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be true
+          @ole_e1.Visible.should be false
+          ole_wb.ReadOnly.should be false
+        end
+
+        it "should set visible => true, read_only => true" do
+          Workbooks.unobtrusively(@simple_file1, :visible => true, :read_only => true) do |book|
+            book.saved.should be true
+            book.visible.should be true
+            book.writable.should be false
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be true
+          @ole_e1.Visible.should be false
+          ole_wb.ReadOnly.should be false
+        end
+
+        it "should modify and remain saved-status" do
+          Workbooks.unobtrusively(@simple_file1) do |book|
+            book.saved.should be true
+            book.visible.should be false
+            book.writable.should be true
+            book.sheet(1)[1,1] = book.sheet(1)[1,1].Value == "foo" ? "bar" : "foo"
+            @new_value = book.sheet(1)[1,1].value
+            book.Saved.should be false
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be true
+          @ole_e1.Visible.should be false
+          ole_wb.ReadOnly.should be false
+          ole_wb.Close
+          book2 = Workbook.open(@simple_file1)
+          book2.sheet(1)[1,1].value.should_not == @old_value
+          book2.sheet(1)[1,1].value.should == @new_value
+        end
+
+        it "should modify and remain saved-status and not save the new value when writable => false" do
+          Workbooks.unobtrusively(@simple_file1, :writable => false) do |book|
+            book.saved.should be true
+            book.visible.should be false
+            book.writable.should be true
+            book.sheet(1)[1,1] = book.sheet(1)[1,1].Value == "foo" ? "bar" : "foo"
+            @new_value = book.sheet(1)[1,1].value
+            book.Saved.should be false
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be true
+          @ole_e1.Visible.should be false
+          ole_wb.ReadOnly.should be false
+          ole_wb.Close
+          book2 = Workbook.open(@simple_file1)
+          book2.sheet(1)[1,1].value.should == @old_value
+          book2.sheet(1)[1,1].value.should_not == @new_value
+        end
+
+      end
+
+      context "with one visible saved writable workbook" do
+
+        before do
+          @ole_e1 = WIN32OLE.new('Excel.Application')
+          ws = @ole_e1.Workbooks
+          @abs_filename = General.absolute_path(@simple_file1)
+          @ole_wb = ws.Open(abs_filename)
+          @ole_e1.Visible = true
+          @ole_wb.Windows(@ole_wb.Name).Visible = true
+        end
+
+        it "should remain visibility" do
+          Workbooks.unobtrusively(@simple_file1) do |book|
+            book.saved.should be true
+            book.visible.should be true
+            book.writable.should be true
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be true
+          @ole_e1.Visible.should be true
+          ole_wb.ReadOnly.should be false
+        end
+
+        it "should set visible => false and remain visibility" do
+          Workbooks.unobtrusively(@simple_file1, :visible => false) do |book|
+            book.saved.should be true
+            book.visible.should be false
+            book.writable.should be true
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be true
+          @ole_e1.Visible.should be true
+          ole_wb.ReadOnly.should be false
+        end
+
+      end
+
+      context "with one unsaved writable workbook" do
+
+        before do
+          @ole_e1 = WIN32OLE.new('Excel.Application')
+          ws = @ole_e1.Workbooks
+          @abs_filename = General.absolute_path(@simple_file1)
+          @ole_wb = ws.Open(abs_filename)
+          @ole_e1.Visible = true
+          @ole_wb.Windows(@ole_wb.Name).Visible = true
+          @old_value = @ole_wb.Worksheets.Item(1).Cells.Item(1,1).Value
+          @ole_wb.Worksheets.Item(name).Cells.Item(1,1).Value = @old_value == "foo" ? "bar" : "foo"
+          @new_value = @ole_wb.Worksheets.Item(1).Cells.Item(1,1).Value
+          @ole_wb.Saved.should be false
+        end
+
+        it "should connect and remain unsaved" do
+          Workbooks.unobtrusively(@simple_file1) do |book|
+            book.saved.should be false
+            book.visible.should be true
+            book.writable.should be true
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be false
+          @ole_e1.Visible.should be true
+          ole_wb.ReadOnly.should be false
+        end
+
+        it "should remain writable" do
+          Workbooks.unobtrusively(@simple_file1, :read_only => true) do |book|
+            book.saved.should be false
+            book.visible.should be true
+            book.writable.should be false
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be false
+          @ole_e1.Visible.should be true
+          ole_wb.ReadOnly.should be false
+        end
+
+        it "should remain unsaved when modifying" do
+          Workbooks.unobtrusively(@simple_file1) do |book|
+            book.sheet(1)[1,1] = book.sheet(1)[1,1].Value == "foo" ? "bar" : "foo"
+            @new_value = book.sheet(1)[1,1].Value
+            book.saved.should be false
+            book.visible.should be true
+            book.writable.should be true
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be false
+          @ole_e1.Visible.should be true
+          ole_wb.ReadOnly.should be false
+          ole_wb.Close
+          book2 = Workbook.open(@simple_file1)
+          book2.sheet(1)[1,1].value.should_not == @old_value
+          book2.sheet(1)[1,1].value.should == @new_value
+        end
+
+        it "should not write with :writable => false" do
+          Workbooks.unobtrusively(@simple_file1, :writable => false) do |book|
+            book.sheet(1)[1,1] = book.sheet(1)[1,1].Value == "foo" ? "bar" : "foo"
+            @new_value = book.sheet(1)[1,1].Value
+            book.saved.should be false
+            book.visible.should be true
+            book.writable.should be true
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be false
+          @ole_e1.Visible.should be true
+          ole_wb.ReadOnly.should be false
+          ole_wb.Close
+          book2 = Workbook.open(@simple_file1)
+          book2.sheet(1)[1,1].value.should == @old_value
+          book2.sheet(1)[1,1].value.should_not == @new_value
+        end
+
+      end
+
+      context "with one read-only workbook" do
+
+        before do
+          @ole_e1 = WIN32OLE.new('Excel.Application')
+          ws = @ole_e1.Workbooks
+          @abs_filename = General.absolute_path(@simple_file1)
+          @ole_wb = ws.Open(abs_filename, RobustExcelOle::XlUpdateLinksNever, true)
+          @ole_e1.Visible = true
+          @ole_wb.Windows(@ole_wb.Name).Visible = true
+          @ole_wb.ReadOnly.should be true
+        end
+
+        it "should connect and remain read-only" do
+          Workbooks.unobtrusively(@simple_file1) do |book|
+            book.saved.should be true
+            book.visible.should be true
+            book.writable.should be false
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be true
+          @ole_e1.Visible.should be true
+          ole_wb.ReadOnly.should be true
+        end
+
+        it "should remain read-only" do
+          Workbooks.unobtrusively(@simple_file1, :read_only => false) do |book|
+            book.saved.should be false
+            book.visible.should be true
+            book.writable.should be true
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be true
+          @ole_e1.Visible.should be true
+          ole_wb.ReadOnly.should be true
+        end
+
+        it "should remain read-only when modifying" do
+          Workbooks.unobtrusively(@simple_file1) do |book|
+            book.sheet(1)[1,1] = book.sheet(1)[1,1].Value == "foo" ? "bar" : "foo"
+            @new_value = book.sheet(1)[1,1].Value
+            book.saved.should be false
+            book.visible.should be true
+            book.writable.should be true
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be true
+          @ole_e1.Visible.should be true
+          ole_wb.ReadOnly.should be true
+          ole_wb.Close
+          book2 = Workbook.open(@simple_file1)
+          book2.sheet(1)[1,1].value.should_not == @old_value
+          book2.sheet(1)[1,1].value.should == @new_value
+        end
+
+        it "should remain read-only when modifying" do
+          Workbooks.unobtrusively(@simple_file1, :read_only => false, :writable => true) do |book|
+            book.sheet(1)[1,1] = book.sheet(1)[1,1].Value == "foo" ? "bar" : "foo"
+            @new_value = book.sheet(1)[1,1].Value
+            book.saved.should be false
+            book.visible.should be true
+            book.writable.should be true
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be true
+          @ole_e1.Visible.should be true
+          ole_wb.ReadOnly.should be true
+          ole_wb.Close
+          book2 = Workbook.open(@simple_file1)
+          book2.sheet(1)[1,1].value.should_not == @old_value
+          book2.sheet(1)[1,1].value.should == @new_value
+        end
+
+        it "should remain read-only when modifying and not save changes, when :writable => false" do
+          Workbooks.unobtrusively(@simple_file1, :writable => false) do |book|
+            book.sheet(1)[1,1] = book.sheet(1)[1,1].Value == "foo" ? "bar" : "foo"
+            @new_value = book.sheet(1)[1,1].Value
+            book.saved.should be false
+            book.visible.should be true
+            book.writable.should be true
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be true
+          @ole_e1.Visible.should be true
+          ole_wb.ReadOnly.should be true
+          ole_wb.Close
+          book2 = Workbook.open(@simple_file1)
+          book2.sheet(1)[1,1].value.should == @old_value
+          book2.sheet(1)[1,1].value.should_not == @new_value
+        end
+
+        it "should remain read-only when modifying and not save changes, when :writable => false" do
+          Workbooks.unobtrusively(@simple_file1, :read_only => false, :writable => false) do |book|
+            book.sheet(1)[1,1] = book.sheet(1)[1,1].Value == "foo" ? "bar" : "foo"
+            @new_value = book.sheet(1)[1,1].Value
+            book.saved.should be false
+            book.visible.should be true
+            book.writable.should be true
+          end
+          ole_wb = WIN32OLE.connect(@abs_filename)
+          ole_wb.Saved.should be true
+          @ole_e1.Visible.should be true
+          ole_wb.ReadOnly.should be true
+          ole_wb.Close
+          book2 = Workbook.open(@simple_file1)
+          book2.sheet(1)[1,1].value.should == @old_value
+          book2.sheet(1)[1,1].value.should_not == @new_value
+        end
+
+      end
+
+    end
+
     describe "excels number" do
 
       it "should open one excel instance and workbook should be closed" do
@@ -188,7 +517,7 @@ describe Workbook do
 
         it "should open not writable" do
           Workbook.unobtrusively(@simple_file, :writable => false) do |book|
-            book.ReadOnly.should be true
+            #
             @old_value = book.sheet(1)[1,1].Value
             book.sheet(1)[1,1] = book.sheet(1)[1,1].Value == "foo" ? "bar" : "foo"
             book.Saved.should be false            
@@ -330,6 +659,7 @@ describe Workbook do
             book.sheet(1)[1,1] = book.sheet(1)[1,1].Value == "foo" ? "bar" : "foo"
             book.sheet(1)[1,1].Value.should_not == @old_value
           end
+          @book.ReadOnly.should be true
           @book.close
           Workbook.unobtrusively(@simple_file1, :writable => false) do |book|
             book.sheet(1)[1,1].Value.should == @old_value
@@ -347,6 +677,7 @@ describe Workbook do
             book.excel.should == @book.excel
             book.sheet(1)[1,1] = book.sheet(1)[1,1].Value == "foo" ? "bar" : "foo"
           end
+          @book.ReadOnly.should be true
           @book.close
           book2 = Workbook.open(@simple_file1)
           book2.sheet(1)[1,1].Value.should == @old_value
@@ -367,7 +698,7 @@ describe Workbook do
 
         it "should open as read-write" do
           Workbook.unobtrusively(@simple_file1, :read_only => false, :writable => false) do |book|
-            book.Readonly.should be true
+            book.Readonly.should be false
             book.should == @book
             book.filename.should == @book.filename
             book.excel.should == @book.excel
@@ -404,6 +735,7 @@ describe Workbook do
           book2.sheet(1)[1,1].Value.should_not == @old_value
         end
 
+=begin
         it "should force to read-write" do
           e1 = Excel.create
           Workbook.unobtrusively(@simple_file1, :writable => true, :rw_change_excel => e1) do |book|
@@ -441,6 +773,7 @@ describe Workbook do
           book2 = Workbook.open(@simple_file1)
           book2.sheet(1)[1,1].Value.should_not == @old_value
         end
+=end
 
         it "should force to read-write" do
           Workbook.unobtrusively(@simple_file1, :writable => true, :read_only => false) do |book|
@@ -563,16 +896,22 @@ describe Workbook do
           @book.sheet(1)[1,1].Value.should_not == @old_value
         end
 
-        it "should force to read-only (not implemented)" do
-          expect{
-            Workbook.unobtrusively(@simple_file1, :read_only => true) 
-          }.to raise_error(NotImplementedREOError)
+        it "should force to read-only" do
+          Workbook.unobtrusively(@simple_file1, :read_only => true) do |book|
+            book.ReadOnly.should be true
+          end
+          @book.Saved.should be false
+          @book.ReadOnly.should be false
+          @book.sheet(1)[1,1].Value.should == @old_value
         end
 
-        it "should force to read-only (not implemented)" do
-          expect{
-            Workbook.unobtrusively(@simple_file1, :read_only => true, :writable => false) 
-          }.to raise_error(NotImplementedREOError)
+        it "should force to read-only with writable false" do
+          Workbook.unobtrusively(@simple_file1, :read_only => true, :writable => false) do |book|
+            book.ReadOnly.should be true
+          end
+          @book.Saved.should be false
+          @book.ReadOnly.should be false
+          @book.sheet(1)[1,1].Value.should == @old_value
         end
 
         it "should open not writable" do
@@ -617,7 +956,7 @@ describe Workbook do
 
         it "should open as read-only" do
           Workbook.unobtrusively(@simple_file1, :read_only => false) do |book|
-            book.Readonly.should be true
+            book.Readonly.should be false
             book.should == @book
             book.filename.should == @book.filename
             book.excel.should == @book.excel
@@ -633,7 +972,7 @@ describe Workbook do
 
         it "should open as read-only" do
           Workbook.unobtrusively(@simple_file1, :read_only => false, :writable => false) do |book|
-            book.Readonly.should be true
+            book.Readonly.should be false
             book.should == @book
             book.filename.should == @book.filename
             book.excel.should == @book.excel
@@ -760,7 +1099,6 @@ describe Workbook do
         end
 
         it "should write in the outer and not in the inner block" do
-          expect{
           Workbook.unobtrusively(@simple_file1) do |book|
             @old_value = book.sheet(1)[1,1].Value
             book.ReadOnly.should be false
@@ -770,7 +1108,7 @@ describe Workbook do
             Workbook.unobtrusively(@simple_file1, :read_only => true) do |book2|
               book2.should == book
               book2.ReadOnly.should be true
-              #book2.Saved.should be false
+              book2.Saved.should be false
               book2.sheet(1)[1,1].Value.should_not == @old_value
               book2.sheet(1)[1,1] = book2.sheet(1)[1,1].Value == "foo" ? "bar" : "foo" 
               book2.sheet(1)[1,1].Value.should == @old_value
@@ -781,7 +1119,6 @@ describe Workbook do
           end
           book = Workbook.open(@simple_file1)
           book.sheet(1)[1,1].Value.should_not == @old_value
-          }.to raise_error(NotImplementedREOError)
         end
 
         it "should write in the outer and not in the inner block" do
@@ -890,7 +1227,7 @@ describe Workbook do
           book1 = Workbook.open(@simple_file1, :read_only => true)
           old_value = book1.sheet(1)[1,1].Value
           Workbook.unobtrusively(@simple_file1, :writable => true) do |book|
-            book.ReadOnly.should be false
+            book.ReadOnly.should be true
             sheet = book.sheet(1)
             sheet[1,1] = sheet[1,1].Value == "foo" ? "bar" : "foo"
             book.excel.should == book1.excel
@@ -1419,6 +1756,7 @@ describe Workbook do
         book3.close
       end
 
+=begin
       it "should open unobtrusively the book in a new Excel to open the book writable" do
         excel1 = Excel.new(:reuse => false)
         excel2 = Excel.new(:reuse => false)
@@ -1475,6 +1813,7 @@ describe Workbook do
         new_sheet[1,1].Value.should_not == cell_value
         book3.close
       end
+=end
 
       it "should open unobtrusively the book in the Excel where it was opened most recently" do
         book2 = Workbook.open(@simple_file1, :force_excel => :new, :read_only => true)
