@@ -669,7 +669,7 @@ describe Workbook do
     end
   end
 
-  describe "promoting" do
+  describe "type-lifting" do
 
     context "with standard" do
 
@@ -681,7 +681,7 @@ describe Workbook do
         @book.close
       end
 
-      it "should promote a win32ole workbook object to a workbook object with an open workbook" do
+      it "should type-lift a win32ole workbook object to a workbook object with an open workbook" do
         workbook = @book.ole_workbook
         book1 = Workbook.new(workbook)
         book1.should be_a Workbook
@@ -1109,8 +1109,8 @@ describe Workbook do
           sheet[1,1] = cell.Value == "foo" ? "bar" : "foo"
           book.excel.should_not == @book.excel
           book.excel.should_not == new_excel
-          book.excel.visible.should be false
-          book.excel.displayalerts.should == :if_visible
+          book.excel.properties[:visible].should be false
+          book.excel.properties[:displayalerts].should == :if_visible
         end
         new_book = Workbook.open(@simple_file1, :visible => true)
         sheet = new_book.sheet(1)

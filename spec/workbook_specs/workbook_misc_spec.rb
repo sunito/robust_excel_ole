@@ -251,7 +251,7 @@ describe Workbook do
       excel2 = book1.excel
       excel2.should == excel1
       excel2.Visible.should be false
-      book2.Windows(book2.Name).Visible.should be false
+      book2.Windows(book2.Name).Visible.should be true
     end
 
     it "should keep the found Excel instance visible" do
@@ -264,7 +264,7 @@ describe Workbook do
       excel2 = book1.excel
       excel2.should == excel1
       excel2.Visible.should be true
-      book2.Windows(book2.Name).Visible.should be false
+      book2.Windows(book2.Name).Visible.should be true
     end
 
     it "should keep the found Excel instance visible with default visible true" do
@@ -292,17 +292,17 @@ describe Workbook do
       book2.Windows(book2.Name).Visible.should be true      
     end
 
-    it "should open the workbook visible if the workbook is new" do
+    it "should open the workbook not visible if the workbook is new" do
       book1 = Workbook.open(@simple_file1, :default => {:visible => true})
-      book1.excel.Visible.should be true
+      book1.excel.Visible.should be false
       book1.Windows(book1.Name).Visible.should be true
-      book1.visible.should be true      
+      book1.visible.should be false      
     end
 
     it "should open the workbook invisible if the workbook is new" do
       book1 = Workbook.open(@simple_file1, :default => {:visible => false})
       book1.excel.Visible.should be false
-      book1.Windows(book1.Name).Visible.should be false
+      book1.Windows(book1.Name).Visible.should be true
       book1.visible.should be false      
     end
 
@@ -324,13 +324,13 @@ describe Workbook do
       book2 = Workbook.open(@simple_file1, :default => {:visible => true})
       excel2 = book2.excel
       book1.Windows(book1.Name).Visible.should be true
-      excel2.Visible.should be true  
-      book2.visible.should be true
+      excel2.Visible.should be false  
+      book2.visible.should be false
     end
 
     it "should open the workbook invisible if the old Excel is closed" do
       book1 = Workbook.open(@simple_file1, :default => {:visible => true})
-      book1.visible.should be true
+      book1.visible.should be false
       excel1 = book1.excel
       excel1.Visible.should be true
       book1.Windows(book1.Name).Visible.should be true
@@ -344,7 +344,6 @@ describe Workbook do
     end
 
   end
-
 =end
 
   describe "force-visible" do
@@ -375,7 +374,7 @@ describe Workbook do
       excel1.visible = true
       book1 = Workbook.open(@simple_file)
       excel1.Visible.should be true
-      excel1.visible.should be true
+      excel1.properties[:visible].should be true
       book1.visible.should be true
     end
 
@@ -587,30 +586,30 @@ describe Workbook do
     it "should set visible and displayalerts if displayalerts => :if_visible" do
       book1 = Workbook.open(@simple_file)
       book1.excel.Visible.should be false
-      book1.excel.displayalerts.should == :if_visible
+      book1.excel.properties[:displayalerts].should == :if_visible
       book1.Windows(book1.Name).Visible.should be true
       book1.visible.should be false
       book2 = Workbook.open(@different_file)
       book2.excel.Visible.should be false
       book2.Windows(book2.Name).Visible.should be true
       book2.visible.should be false
-      book2.excel.visible.should be false
-      book2.excel.displayalerts.should == :if_visible
+      book2.excel.properties[:visible].should be false
+      book2.excel.properties[:displayalerts].should == :if_visible
       book2.excel.DisplayAlerts.should be false
     end
 
     it "should set visible and displayalerts if displayalerts => :if_visible" do
       book1 = Workbook.open(@simple_file)
       book1.excel.Visible.should be false
-      book1.excel.displayalerts.should == :if_visible
+      book1.excel.properties[:displayalerts].should == :if_visible
       book1.Windows(book1.Name).Visible.should be true
       book1.visible.should be false
       book2 = Workbook.open(@different_file, :visible => true)
       book2.excel.Visible.should be true
       book2.Windows(book2.Name).Visible.should be true
       book2.visible.should be true
-      book2.excel.visible.should be true
-      book2.excel.displayalerts.should == :if_visible
+      book2.excel.properties[:visible].should be true
+      book2.excel.properties[:displayalerts].should == :if_visible
       book2.excel.DisplayAlerts.should be true
     end
   end
@@ -663,8 +662,8 @@ describe Workbook do
       it "should create and use a hidden Excel instance" do
         book2 = Workbook.open(@simple_file1, :force_excel => @book.bookstore.hidden_excel)
         book2.excel.should_not == @book.excel
-        book2.excel.visible.should be false
-        book2.excel.displayalerts.should == :if_visible
+        book2.excel.properties[:visible].should be false
+        book2.excel.properties[:displayalerts].should == :if_visible
         book2.close 
       end
     end

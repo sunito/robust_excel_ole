@@ -3,6 +3,7 @@
 module General
 
   IS_JRUBY_PLATFORM = (RUBY_PLATFORM =~ /java/)
+  ::JRUBY_BUG_EXPANDPATH   = IS_JRUBY_PLATFORM && true
   ::JRUBY_BUG_CONNECT      = IS_JRUBY_PLATFORM && true
   ::JRUBY_BUG_COPYSHEETS   = IS_JRUBY_PLATFORM && true
   ::JRUBY_BUG_ERRORMESSAGE = IS_JRUBY_PLATFORM && true
@@ -11,7 +12,8 @@ module General
 
 
   # @private
-  def absolute_path(file) 
+  def absolute_path(file)     
+    file[0,2] = './' if ::JRUBY_BUG_EXPANDPATH && file[0,2] == "C:" && file[2] != '/'
     file = File.expand_path(file)
     file = RobustExcelOle::Cygwin.cygpath('-w', file) if RUBY_PLATFORM =~ /cygwin/
     WIN32OLE.new('Scripting.FileSystemObject').GetAbsolutePathName(file).tr('/','\\')
@@ -75,7 +77,7 @@ class WIN32OLE
 
   include RobustExcelOle
   
-  # promoting WIN32OLE objects to RobustExcelOle objects
+  # type-lifting WIN32OLE objects to RobustExcelOle objects
   def to_reo
     class2method = [{Excel => :Hwnd}, {Workbook => :FullName}, {Worksheet => :Copy}, {Range => :Address}]
     class2method.each do |element|

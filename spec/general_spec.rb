@@ -41,25 +41,25 @@ module RobustExcelOle
         @book1 = Workbook.open(@simple_file)
       end
 
-      it "should promote an Excel" do
+      it "should type-lift an Excel" do
         excel = @book1.excel.ole_excel.to_reo
         excel.class.should == RobustExcelOle::Excel
         excel.should be_alive
       end
 
-      it "should promote a workbook" do
+      it "should type-lift a workbook" do
         workbook = @book1.ole_workbook.to_reo
         workbook.should be_a Workbook
         workbook.should be_alive
       end
 
-      it "should promote a worksheet" do
+      it "should type-lift a worksheet" do
         worksheet = @book1.sheet(1).ole_worksheet.to_reo
         worksheet.should be_kind_of Worksheet
         worksheet.name.should == "Sheet1"
       end
 
-      it "should promote a range" do
+      it "should type-lift a range" do
         range = @book1.sheet(1).range([1,1]).ole_range.to_reo
         range.should be_kind_of Range
         range.Value.should == "foo"
@@ -81,8 +81,7 @@ module RobustExcelOle
           ["ActiveCell", "ActiveSheet", "ActiveWorkbook", "Application",  "Calculate", "Cells", "Columns",
             "DisplayAlerts", "Evaluate", "Hwnd", "Name", "Names", "Quit", "Range", "Ready", "Save", 
             "Sheets", "UserName", "Value", "Visible", "Workbooks", "Worksheets"]
-        @excel_methods = ["alive?", "workbook_class", "close", "displayalerts", "recreate", "visible", 
-          "with_displayalerts"] 
+        @excel_methods = ["alive?", "workbook_class", "close", "properties", "recreate", "with_displayalerts"] 
         @ole_sheet_methods = []
          # ["Activate", "Calculate", "Copy", "Name", "Select", "Evaluate", "Protect", "Unprotect"]
         @sheet_methods = ["workbook_class", "col_range", "each", "each_column", "each_column_with_index",
@@ -152,9 +151,8 @@ module RobustExcelOle
 
         it "should return the right absolute paths" do
           absolute_path("C:/abc").should == "C:\\abc"
-          absolute_path("C:\\abc").should == "C:\\abc"
+          #absolute_path("C:\\abc").should == "C:\\abc"
           Dir.chdir "C:/windows"
-          # does not work under jruby
           absolute_path("C:abc").downcase.should == Dir.pwd.gsub("/","\\").downcase + "\\abc"
           absolute_path("C:abc").upcase.should   == File.expand_path("abc").gsub("/","\\").upcase
         end

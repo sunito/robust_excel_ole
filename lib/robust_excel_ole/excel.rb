@@ -3,6 +3,8 @@
 require 'weakref'
 require 'Win32API'
 
+
+
 def ka
   Excel.kill_all
 end
@@ -16,18 +18,13 @@ module RobustExcelOle
 
   class Excel < RangeOwners
     attr_accessor :ole_excel
-    #attr_accessor :created
-    attr_accessor :workbook
-
-    # setter methods are implemented below
-    attr_reader :visible
-    attr_reader :displayalerts
-    attr_reader :calculation
-    attr_reader :screenupdating
+    attr_reader :properties
 
     alias ole_object ole_excel
 
     @@hwnd2excel = {}
+
+    PROPERTIES = [:visible, :displayalerts, :calculation, :screenupdating]
 
     # creates a new Excel instance
     # @param [Hash] options the options
@@ -96,10 +93,7 @@ module RobustExcelOle
         unless reused || connected
           options = { :displayalerts => :if_visible, :visible => false, :screenupdating => true }.merge(options)
         end
-        result.visible = options[:visible] unless options[:visible].nil? 
-        result.displayalerts = options[:displayalerts] unless options[:displayalerts].nil?
-        result.calculation = options[:calculation] unless options[:calculation].nil?
-        result.screenupdating = options[:screenupdating] unless options[:screenupdating].nil?
+        result.set_options(options)        
       end
       result
     end    
@@ -118,13 +112,11 @@ module RobustExcelOle
     def recreate(opts = {})
       unless alive?
         opts = {
-          :visible => @visible || false,
-          :displayalerts => @displayalerts || :if_visible
+          :visible => @properties[:visible] || false,
+          :displayalerts => @properties[:displayalerts] || :if_visible
         }.merge(opts)
         @ole_excel = WIN32OLE.new('Excel.Application')
-        self.visible = opts[:visible]
-        self.displayalerts = opts[:displayalerts]
-        self.calculation = opts[:calculation]
+        set_options(opts)
         if opts[:reopen_workbooks]
           books = workbook_class.books
           books.each do |book|
@@ -545,7 +537,7 @@ module RobustExcelOle
 
     # sets DisplayAlerts in a block
     def with_displayalerts displayalerts_value
-      old_displayalerts = displayalerts
+      old_displayalerts = @properties[:displayalerts]
       self.displayalerts = displayalerts_value
       begin
         yield self
@@ -556,26 +548,29 @@ module RobustExcelOle
 
     # makes the current Excel instance visible or invisible
     def visible= visible_value
-      @ole_excel.Visible = @visible = visible_value
-      @ole_excel.DisplayAlerts = @visible if @displayalerts == :if_visible
+      return if visible_value.nil?
+      @ole_excel.Visible = @properties[:visible] = visible_value
+      @ole_excel.DisplayAlerts = @properties[:visible] if @properties[:displayalerts] == :if_visible
     end
 
     # enables DisplayAlerts in the current Excel instance
     def displayalerts= displayalerts_value
-      @displayalerts = displayalerts_value
-      @ole_excel.DisplayAlerts = @displayalerts == :if_visible ? @ole_excel.Visible : displayalerts_value
+      return if displayalerts_value.nil?
+      @properties[:displayalerts] = displayalerts_value
+      @ole_excel.DisplayAlerts = @properties[:displayalerts] == :if_visible ? @ole_excel.Visible : displayalerts_value
     end
 
     # sets ScreenUpdating
     def screenupdating= screenupdating_value
-      @ole_excel.ScreenUpdating = @screenupdating = screenupdating_value
+      return if screenupdating_value.nil?
+      @ole_excel.ScreenUpdating = @properties[:screenupdating] = screenupdating_value
     end
 
     # sets calculation mode
     # retains the saved-status of the workbooks when set to manual
     def calculation= calculation_mode
       return if calculation_mode.nil?
-      @calculation = calculation_mode
+      @properties[:calculation] = calculation_mode
       calc_mode_changable = @ole_excel.Workbooks.Count > 0 && @ole_excel.Calculation.is_a?(Integer)
       if calc_mode_changable
         retain_saved_workbooks do
@@ -615,9 +610,9 @@ module RobustExcelOle
     def Calculation= calculation_vba_mode
       case calculation_vba_mode
       when XlCalculationManual
-        @calculation = :manual
+        @properties[:calculation] = :manual
       when XlCalculationAutomatic
-        @calculation = :automatic
+        @properties[:calculation] = :automatic
       end
       @ole_excel.Calculation = calculation_vba_mode
     end
@@ -637,13 +632,22 @@ module RobustExcelOle
 
     # set options in this Excel instance
     def for_this_instance(options)
-      self.class.new(@ole_excel, options)
+      set_options(options)
+      #self.class.new(@ole_excel, options)
     end
 
-    def set_options(options)
-      for_this_instance(options)
-    end    
+    #def set_options(options)
+    #  for_this_instance(options)
+    #end  
 
+    def set_options(options)      
+      @properties ||= { }
+      PROPERTIES.each do |property|
+        method = (property.to_s + '=').to_sym
+        self.send(method, options[property]) 
+      end
+    end
+  
     # set options in all workbooks
     def for_all_workbooks(options)
       each_workbook(options)
@@ -694,6 +698,13 @@ module RobustExcelOle
       workbook.color_if_modified = 42  unless workbook.nil? # aqua-marin
       set_namevalue_glob(name,value)
       workbook.color_if_modified = old_color_if_modified
+    end
+
+    # @private
+    # returns active workbook
+    def workbook
+      return @workbook unless @workbook.nil?
+      @workbook = workbook_class.new(@ole_excel.ActiveWorkbook)
     end
 
     # @private
