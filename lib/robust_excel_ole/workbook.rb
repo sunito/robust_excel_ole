@@ -106,6 +106,7 @@ module RobustExcelOle
                                   :prefer_excel    => (options[:read_only] ? forced_excel : nil))
           end
         rescue
+          raise
           trace "#{$!.message}"
         end
         if book 
