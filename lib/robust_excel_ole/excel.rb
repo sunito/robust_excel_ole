@@ -111,10 +111,8 @@ module RobustExcelOle
     # @return [Excel] an Excel instance
     def recreate(opts = {})
       unless alive?
-        opts = {
-          :visible => @properties[:visible] || false,
-          :displayalerts => @properties[:displayalerts] || :if_visible
-        }.merge(opts)
+        opts = {:visible => false, :displayalerts => :if_visible}.merge(
+               {:visible => @properties[:visible], :displayalerts => @properties[:displayalerts}).merge(opts)        
         @ole_excel = WIN32OLE.new('Excel.Application')
         set_options(opts)
         if opts[:reopen_workbooks]
@@ -391,7 +389,7 @@ module RobustExcelOle
     # if this Excel instance is being closed, then Excel creates a new Excel instance
     # @private
     def self.current_ole_excel   
-      if ::JRUBY_BUG_CONNECT
+      if ::CONNECT_EXCEL_JRUBY_BUG
         result = known_excel_instance
         if result.nil?
           if excels_number > 0
@@ -737,7 +735,7 @@ module RobustExcelOle
     def method_missing(name, *args) 
       if name.to_s[0,1] =~ /[A-Z]/
         raise ObjectNotAlive, 'method missing: Excel not alive' unless alive?
-        if ::JRUBY_BUG_ERRORMESSAGE
+        if ::ERRORMESSAGE_JRUBY_BUG
           begin
             @ole_excel.send(name, *args)
           rescue Java::OrgRacobCom::ComFailException => msg
