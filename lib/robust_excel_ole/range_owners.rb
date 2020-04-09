@@ -132,7 +132,7 @@ module RobustExcelOle
       begin
         return set_namevalue_glob(name, value, opts) if self.is_a?(Workbook) 
         ole_range = self.Range(name)
-      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
+      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException, VBAMethodMissingError
         raise NameNotFound, "name #{name.inspect} not in #{self.inspect}"
       end
       begin
@@ -263,7 +263,7 @@ module RobustExcelOle
 
     def name_object(name)
       self.Names.Item(name)
-    rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
+    rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException, VBAMethodMissingError
       begin
         self.Parent.Names.Item(name)
       rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException

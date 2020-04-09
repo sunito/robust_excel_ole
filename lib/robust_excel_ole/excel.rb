@@ -17,7 +17,7 @@ module RobustExcelOle
   # See https://docs.microsoft.com/en-us/office/vba/api/excel.application(object)#methods
 
   class Excel < RangeOwners
-    attr_accessor :ole_excel
+    attr_reader :ole_excel
     attr_reader :properties
 
     alias ole_object ole_excel
@@ -112,7 +112,7 @@ module RobustExcelOle
     def recreate(opts = {})
       unless alive?
         opts = {:visible => false, :displayalerts => :if_visible}.merge(
-               {:visible => @properties[:visible], :displayalerts => @properties[:displayalerts}).merge(opts)        
+               {:visible => @properties[:visible], :displayalerts => @properties[:displayalerts]}).merge(opts)        
         @ole_excel = WIN32OLE.new('Excel.Application')
         set_options(opts)
         if opts[:reopen_workbooks]
