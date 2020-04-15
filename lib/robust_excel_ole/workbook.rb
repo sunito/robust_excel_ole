@@ -15,27 +15,30 @@ module RobustExcelOle
     
     attr_reader :ole_workbook
     attr_reader :excel
-    attr_accessor :stored_filename
+    attr_reader :stored_filename
 
     alias ole_object ole_workbook
 
-    DEFAULT_OPEN_OPTS = {
-      :default => {:excel => :current},
+    CORE_DEFAULT_OPEN_OPTS = {
+      :default => {:excel => :current}, 
       :force => {},
-      :update_links => :never,
+      :update_links => :never
+    }.freeze
+
+    DEFAULT_OPEN_OPTS = {
       :if_unsaved    => :raise,
       :if_obstructed => :raise,
       :if_absent     => :raise,
       :if_exists => :raise
-      #:check_compatibility => false
-    }#.freeze
+    }.merge(CORE_DEFAULT_OPEN_OPTS).freeze  
 
-    CORE_DEFAULT_OPEN_OPTS = {
-      :default => {:excel => :current}, :force => {}, :update_links => :never
-    }#.freeze
-
-    ABBREVIATIONS = [[:default,:d], [:force, :f], [:excel, :e], [:visible, :v],
-                     [:if_obstructed, :if_blocked]].freeze
+    ABBREVIATIONS = [
+      [:default,:d],
+      [:force, :f],
+      [:excel, :e],
+      [:visible, :v],
+      [:if_obstructed, :if_blocked]
+    ].freeze
 
 
     # opens a workbook.
@@ -81,22 +84,24 @@ module RobustExcelOle
     # :visible              true -> makes the workbook visible
     # :check_compatibility  true -> check compatibility when saving
     # :update_links         true -> user is being asked how to update links, false -> links are never updated
-    # @return [Workbook] a representation of a workbook
-    def self.open(file_or_workbook, opts = { }, &block)
-      new(file_or_workbook, opts, &block)          
-    end
-
+    # @return [Workbook] a representation of a workbook   
     def self.new(file_or_workbook, opts = { }, &block)
       process_options(opts)
-      if file_or_workbook.is_a? WIN32OLE
+      case file_or_workbook
+      when NilClass
+        raise FileNameNotGiven, 'filename is nil' 
+      when WIN32OLE
         file = file_or_workbook.Fullname.tr('\\','/') 
-      else
+      when Workbook
+        return file_or_workbook
+      when String
         file = file_or_workbook
-        raise(FileNameNotGiven, 'filename is nil') if file.nil?
-        raise(FileNotFound, "file #{General.absolute_path(file).inspect} is a directory") if File.directory?(file)
+        raise FileNotFound, "file #{General.absolute_path(file).inspect} is a directory" if File.directory?(file)
+      else
+        raise TypeREOError, 'given object is neither a filename, a Win32ole, nor a Workbook object'
       end
       # try to fetch the workbook from the bookstore
-      set_was_open opts, false
+      set_was_open opts, file_or_workbook.is_a?(WIN32OLE)
       book = nil
       if opts[:force][:excel] != :new
         # if readonly is true, then prefer a book that is given in force_excel if this option is set              
@@ -125,9 +130,10 @@ module RobustExcelOle
           end
         end
       end        
-      erg = super(file_or_workbook, opts, &block)
-      erg 
+      super(file_or_workbook, opts, &block)
     end
+
+    singleton_class.send :alias_method, :open, :new
 
     # creates a new Workbook object, if a file name is given
     # Promotes the win32ole workbook to a Workbook object, if a win32ole-workbook is given
@@ -150,7 +156,7 @@ module RobustExcelOle
         ensure_workbook(filename, options)        
       end      
       set_options(filename, options)
-      bookstore.store(self)
+      store_myself
       r1c1_letters = @ole_workbook.Worksheets.Item(1).Cells.Item(1,1).Address(true,true,XlR1C1).gsub(/[0-9]/,'') #('ReferenceStyle' => XlR1C1).gsub(/[0-9]/,'')
       address_class.new(r1c1_letters)
       if block
@@ -178,7 +184,7 @@ module RobustExcelOle
     # translates abbreviations and synonyms and merges with default options
     def self.process_options(opts, proc_opts = {:use_defaults => true})
       translate(opts)
-      default_opts = proc_opts[:use_defaults] ? DEFAULT_OPEN_OPTS : CORE_DEFAULT_OPEN_OPTS        
+      default_opts = (proc_opts[:use_defaults] ? DEFAULT_OPEN_OPTS : CORE_DEFAULT_OPEN_OPTS).dup
       translate(default_opts)
       opts.merge!(default_opts) {|key, v1, v2| v1 }
       opts[:default] = default_opts[:default].merge(opts[:default]) unless opts[:default].nil?
@@ -287,15 +293,10 @@ module RobustExcelOle
 
     # @private
     # connects to an unknown workbook
-    def connect(filename,options)
-      excels_number = excel_class.excels_number
-      workbooks_number = if excels_number>0 
-        excel_class.current.Workbooks.Count 
-      else 0
-      end
-      abs_filename = General.absolute_path(filename)
+    def connect(filename,options)   
+      workbooks_number = excel_class.excels_number==0 ? 0 : excel_class.current.Workbooks.Count
       @ole_workbook = begin
-        WIN32OLE.connect(abs_filename)
+        WIN32OLE.connect(General.absolute_path(filename))
       rescue
         if $!.message =~ /moniker/
           raise WorkbookConnectingBlockingError
@@ -465,10 +466,10 @@ module RobustExcelOle
     # parameter 'UpdateLinks' has no effect
     def updatelinks_vba(updatelinks_reo)
       case updatelinks_reo
-      when :alert then RobustExcelOle::XlUpdateLinksUserSetting
-      when :never then RobustExcelOle::XlUpdateLinksNever
+      when :alert  then RobustExcelOle::XlUpdateLinksUserSetting
+      when :never  then RobustExcelOle::XlUpdateLinksNever
       when :always then RobustExcelOle::XlUpdateLinksAlways
-      else RobustExcelOle::XlUpdateLinksNever
+      else              RobustExcelOle::XlUpdateLinksNever
       end
     end
 
@@ -747,6 +748,11 @@ module RobustExcelOle
 
   private
 
+    def store_myself
+      bookstore.store(self)
+      @stored_filename = filename
+    end
+
     # @private
     def save_as_workbook(file, options)  
       dirname, basename = File.split(file)
@@ -757,7 +763,7 @@ module RobustExcelOle
         when '.xlsm' then RobustExcelOle::XlOpenXMLWorkbookMacroEnabled
         end
       @ole_workbook.SaveAs(General.absolute_path(file), file_format)
-      bookstore.store(self)
+      store_myself
     rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
       if msg.message =~ /SaveAs/ && msg.message =~ /Workbook/
         # trace "save: canceled by user" if options[:if_exists] == :alert || options[:if_exists] == :excel
@@ -873,9 +879,7 @@ module RobustExcelOle
       rescue WIN32OLERuntimeError, NameNotFound, Java::OrgRacobCom::ComFailException
         raise WorksheetREOError, "could not add given worksheet #{sheet.inspect}"
       end
-      #ole_sheet = @excel.Activesheet
       ole_sheet = ole_workbook.Activesheet
-      #ole_sheet = ole_sheet.nil? ? ole_workbook.Worksheets.Item(ole_workbook.Worksheets.Count) : ole_sheet
       new_sheet = worksheet_class.new(ole_sheet)
       new_sheet.name = new_sheet_name if new_sheet_name
       new_sheet
