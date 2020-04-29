@@ -2,9 +2,10 @@
 
 module RobustExcelOle
 
-  class Address < REOCommon
+  class AddressTool < REOCommon
 
-    def initialize(r1c1_letters)
+    def initialize(address_string)
+      r1c1_letters = address_string.gsub(/[0-9]/,'')
       @row_letter = r1c1_letters[0..0]
       @col_letter = r1c1_letters[1..1]
     end
@@ -34,7 +35,7 @@ module RobustExcelOle
 
     def transform_address(address, format)
       address = address.is_a?(Array) ? address : [address]
-      raise AddressInvalid, "address #{address.inspect} has more than two components" if address.size > 2
+      raise AddressToolInvalid, "address #{address.inspect} has more than two components" if address.size > 2
       begin
         if address.size == 1
           comp1, comp2 = address[0].split(':')
@@ -42,7 +43,7 @@ module RobustExcelOle
           is_a1 = comp1 =~ a1_expr && (comp2.nil? || comp2 =~ a1_expr)
           r1c1_expr = /^(([A-Z]\[?-?[0-9]+\]?[A-Z]\[?-?[0-9]+\]?)|([A-Z]\[?-?[0-9]+\]?)|([A-Z]\[?-?[0-9]+\]?))$/
           is_r1c1 = comp1 =~ r1c1_expr && (comp2.nil? || comp2 =~ r1c1_expr) && (not is_a1) 
-          raise AddressInvalid, "address #{address.inspect} not in A1- or r1c1-format" unless (is_a1 || is_r1c1)
+          raise AddressToolInvalid, "address #{address.inspect} not in A1- or r1c1-format" unless (is_a1 || is_r1c1)
           return address[0].gsub('[','(').gsub(']',')') if (is_a1 && format==:a1) || (is_r1c1 && format==:r1c1)         
           given_format = (is_a1) ? :a1 : :r1c1
           row_comp1, col_comp1 = analyze(comp1,given_format)
@@ -67,7 +68,7 @@ module RobustExcelOle
           end          
         end
       rescue
-        raise AddressInvalid, "address (#{address.inspect}) format not correct"
+        raise AddressToolInvalid, "address (#{address.inspect}) format not correct"
       end
       if format==:r1c1
         r1c1_string(@row_letter,rows,:min) + r1c1_string(@col_letter,columns,:min) + ":" + 

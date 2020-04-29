@@ -41,11 +41,205 @@ describe Workbook do
     @simple_file_hostname_share_path1 = @simple_file_hostname_share_path
     @simple_file_network_path_other_path1 = @simple_file_network_path_other_path
     @simple_file_hostname_share_path_other_path1 = @simple_file_hostname_share_path_other_path
+    @simple_file_xlsm1 = @simple_file_xlsm
+    @simple_file_xlsx1 = @simple_file_xlsx
   end
 
   after do
     Excel.kill_all
     rm_tmp(@dir)
+  end
+
+  describe "basic tests with xlsx-workbooks" do
+
+    context "with simple file" do
+
+      it "should simply create a new workbook given a file" do
+        book = Workbook.new(@simple_file_xlsx1)
+        book.should be_alive
+        book.should be_a Workbook
+        book.filename.should == @simple_file_xlsx1
+      end
+
+    end
+
+    context "with transparency identity" do
+
+      before do
+        @book = Workbook.open(@simple_file_xlsx1)        
+      end
+
+      after do
+        @book.close
+      end
+
+      it "should yield identical Workbook objects referring to identical WIN32OLE objects" do
+        book2 = Workbook.new(@book.ole_workbook)
+        book2.equal?(@book).should be true
+      end
+
+    end
+
+    context "with connecting to one unknown workbook" do
+
+      before do
+        ole_e1 = WIN32OLE.new('Excel.Application')
+        ws = ole_e1.Workbooks
+        abs_filename = General.absolute_path(@simple_file_xlsx1)
+        @ole_wb = ws.Open(abs_filename)
+      end
+
+      it "should connect to an unknown workbook" do
+        Workbook.open(@simple_file_xlsx1) do |book|
+          book.filename.should == @simple_file_xlsx1
+          book.should be_alive
+          book.should be_a Workbook
+          book.excel.ole_excel.Hwnd.should == @ole_wb.Application.Hwnd
+          Excel.excels_number.should == 1
+        end
+      end
+    end
+
+    context "with :force => excel" do
+
+      before do
+        @book = Workbook.open(@simple_file_xlsx1)
+      end
+
+      it "should open in a new Excel" do
+        book2 = Workbook.open(@simple_file_xlsx1, :force => {:excel => :new})
+        book2.should be_alive
+        book2.should be_a Workbook
+        book2.excel.should_not == @book.excel 
+        book2.should_not == @book
+        @book.Readonly.should be false
+        book2.Readonly.should be true
+        book2.close
+      end
+
+    end
+
+    context "with :if_unsaved" do
+
+      before do
+        @book = Workbook.open(@simple_file_xlsx1)
+        @sheet = @book.sheet(1)
+        @book.add_sheet(@sheet, :as => 'a_name')
+        @book.visible = true
+      end
+
+      after do
+        @book.close(:if_unsaved => :forget)
+        @new_book.close rescue nil
+      end
+
+      it "should let the book open, if :if_unsaved is :accept" do
+        expect {
+          @new_book = Workbook.open(@simple_file_xlsx1, :if_unsaved => :accept)
+          }.to_not raise_error
+        @book.should be_alive
+        @new_book.should be_alive
+        @new_book.should == @book
+      end
+    
+    end
+  
+  end
+
+  describe "basic tests with xlsm-workbooks" do
+
+    context "with simple file" do
+
+      it "should simply create a new workbook given a file" do
+        book = Workbook.new(@simple_file_xlsm1)
+        book.should be_alive
+        book.should be_a Workbook
+        book.filename.should == @simple_file_xlsm1
+      end
+
+    end
+
+    context "with transparency identity" do
+
+      before do
+        @book = Workbook.open(@simple_file_xlsm1)        
+      end
+
+      after do
+        @book.close
+      end
+
+      it "should yield identical Workbook objects referring to identical WIN32OLE objects" do
+        book2 = Workbook.new(@book.ole_workbook)
+        book2.equal?(@book).should be true
+      end
+
+    end
+
+    context "connecting to one unknown workbook" do
+
+      before do
+        ole_e1 = WIN32OLE.new('Excel.Application')
+        ws = ole_e1.Workbooks
+        abs_filename = General.absolute_path(@simple_file_xlsm1)
+        @ole_wb = ws.Open(abs_filename)
+      end
+
+      it "should connect to an unknown workbook" do
+        Workbook.open(@simple_file_xlsm1) do |book|
+          book.filename.should == @simple_file_xlsm1
+          book.should be_alive
+          book.should be_a Workbook
+          book.excel.ole_excel.Hwnd.should == @ole_wb.Application.Hwnd
+          Excel.excels_number.should == 1
+        end
+      end
+    end
+
+    context "with :force => excel" do
+
+      before do
+        @book = Workbook.open(@simple_file_xlsm1)
+      end
+
+      it "should open in a new Excel" do
+        book2 = Workbook.open(@simple_file_xlsm1, :force => {:excel => :new})
+        book2.should be_alive
+        book2.should be_a Workbook
+        book2.excel.should_not == @book.excel 
+        book2.should_not == @book
+        @book.Readonly.should be false
+        book2.Readonly.should be true
+        book2.close
+      end
+
+    end
+
+    context "with :if_unsaved" do
+
+      before do
+        @book = Workbook.open(@simple_file_xlsm1)
+        @sheet = @book.sheet(1)
+        @book.add_sheet(@sheet, :as => 'a_name')
+        @book.visible = true
+      end
+
+      after do
+        @book.close(:if_unsaved => :forget)
+        @new_book.close rescue nil
+      end
+
+      it "should let the book open, if :if_unsaved is :accept" do
+        expect {
+          @new_book = Workbook.open(@simple_file_xlsm1, :if_unsaved => :accept)
+          }.to_not raise_error
+        @book.should be_alive
+        @new_book.should be_alive
+        @new_book.should == @book
+      end
+
+    end
+
   end
 
   describe "open and new" do
@@ -717,7 +911,7 @@ describe Workbook do
         excel1.close
         expect{
           book1 = Workbook.open(@simple_file1, :force => {:excel => excel1})
-          }.to raise_error(ExcelREOError, "excel is not alive")
+          }.to raise_error(ExcelREOError, "Excel is not alive")
       end
 
       it "should open in a provided Excel" do
@@ -1385,7 +1579,7 @@ describe Workbook do
       it "should raise an error if no Excel or Workbook is given" do
         expect{
           Workbook.open(@simple_file1, :force => {:excel => :b})
-          }.to raise_error(TypeREOError, "given object is neither an Excel, a Workbook, nor a Win32ole")
+          }.to raise_error(TypeREOError, "given object is neither a WIN32OLE nor a RobustExcelOle object")
       end
 
       it "should do force_excel even if both force_ and default_excel is given" do
@@ -1541,7 +1735,7 @@ describe Workbook do
       it "should raise an error if no Excel or Workbook is given" do
         expect{
           Workbook.open(@simple_file1, :excel => :b)
-          }.to raise_error(TypeREOError, "given object is neither an Excel, a Workbook, nor a Win32ole")
+          }.to raise_error(TypeREOError, "given object is neither a WIN32OLE nor a RobustExcelOle object")
       end
 
       it "should do force_excel even if both force_ and default_excel is given" do
@@ -1699,7 +1893,7 @@ describe Workbook do
       it "should raise an error if no Excel or Workbook is given" do
         expect{
           Workbook.open(@simple_file1, :force_excel => :b)
-          }.to raise_error(TypeREOError, "given object is neither an Excel, a Workbook, nor a Win32ole")
+          }.to raise_error(TypeREOError, "given object is neither a WIN32OLE nor a RobustExcelOle object")
       end
 
       it "should do force_excel even if both force_ and default_excel is given" do
@@ -1940,7 +2134,7 @@ describe Workbook do
       it "should raise an error if no Excel or Workbook is given" do
         expect{
           Workbook.open(@different_file, :default => {:excel => :a})
-          }.to raise_error(TypeREOError, "given object is neither an Excel, a Workbook, nor a Win32ole")
+          }.to raise_error(TypeREOError, "given object is neither a WIN32OLE nor a RobustExcelOle object")
       end
       
     end
@@ -2122,7 +2316,7 @@ describe Workbook do
       it "should raise an error if no Excel or Workbook is given" do
         expect{
           Workbook.open(@different_file, :default_excel => :a)
-          }.to raise_error(TypeREOError, "given object is neither an Excel, a Workbook, nor a Win32ole")
+          }.to raise_error(TypeREOError, "given object is neither a WIN32OLE nor a RobustExcelOle object")
       end
       
     end
