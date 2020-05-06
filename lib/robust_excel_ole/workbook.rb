@@ -22,7 +22,8 @@ module RobustExcelOle
     CORE_DEFAULT_OPEN_OPTS = {
       :default => {:excel => :current}, 
       :force => {},
-      :update_links => :never
+      :update_links => :never,
+      :check_compatibility => false
     }.freeze
 
     DEFAULT_OPEN_OPTS = {
@@ -105,9 +106,12 @@ module RobustExcelOle
       book = nil
       if opts[:force][:excel] != :new
         # if readonly is true, then prefer a book that is given in force_excel if this option is set              
-        forced_excel = 
+        forced_excel = begin
           (opts[:force][:excel].nil? || opts[:force][:excel] == :current) ? 
-            (excel_class.new(:reuse => true) if !::CONNECT_JRUBY_BUG) : opts[:force][:excel].to_reo.excel              
+            (excel_class.new(:reuse => true) if !::CONNECT_JRUBY_BUG) : opts[:force][:excel].to_reo.excel
+        rescue NoMethodError
+          raise TypeREOError, "provided Excel option value is neither an Excel object nor a valid option"
+        end
         begin
           book = if File.exists?(file)
             bookstore.fetch(file, :prefer_writable => !(opts[:read_only]),
@@ -115,7 +119,7 @@ module RobustExcelOle
           end
         rescue
           raise
-          trace "#{$!.message}"
+          #trace "#{$!.message}"
         end
         if book 
           set_was_open opts, book.alive?
@@ -146,7 +150,7 @@ module RobustExcelOle
         @ole_workbook = file_or_workbook
         ole_excel = begin 
           @ole_workbook.Application
-        rescue
+        rescue WIN32OLERuntimeError
           raise ExcelREOError, 'could not determine the Excel instance'
         end
         @excel = excel_class.new(ole_excel)
@@ -224,7 +228,7 @@ module RobustExcelOle
       elsif excel_option.respond_to?(:to_reo)
         excel_option.to_reo.excel
       else
-        raise ExcelREOError, "could not determine an Excel object"
+        raise TypeREOError, "provided Excel option value is neither an Excel object nor a valid option"
       end
       raise ExcelREOError, "Excel is not alive" unless @excel && @excel.alive?
     end
@@ -278,12 +282,20 @@ module RobustExcelOle
       @ole_workbook = begin
         WIN32OLE.connect(General.absolute_path(filename))
       rescue
-        raise($!.message =~ /moniker/ ? WorkbookConnectingBlockingError : WorkbookConnectingUnknownError) 
+        if $!.message =~ /moniker/
+          raise WorkbookConnectingBlockingError, "some workbook is blocking when connecting"
+        else 
+          raise WorkbookConnectingUnknownError, "unknown error when connecting to a workbook"
+        end
       end
       ole_excel = begin
         @ole_workbook.Application     
       rescue 
-        raise($!.message =~ /dispid/ ? WorkbookConnectingUnsavedError : WorkbookConnectingUnknownError) 
+        if $!.message =~ /dispid/
+          raise WorkbookConnectingUnsavedError, "workbook is unsaved when connecting"
+        else 
+          raise WorkbookConnectingUnknownError, "unknown error when connecting to a workbook"
+        end
       end
       set_was_open options, (ole_excel.Workbooks.Count == workbooks_number)
       @excel = excel_class.new(ole_excel)
@@ -581,15 +593,15 @@ module RobustExcelOle
         was_saved = book.saved
         was_check_compatibility = book.check_compatibility
         was_calculation = book.excel.properties[:calculation]
-        book.apply_options(file,opts) 
+        book.send :apply_options, file, opts
         yield book
       ensure
         if book && book.alive?
           do_not_write = opts[:read_only] || opts[:writable]==false
           book.save unless book.saved || do_not_write || !book.writable
           if (opts[:read_only] && was_writable) || (!opts[:read_only] && !was_writable)
-            book.apply_options(file, opts.merge({:read_only => !was_writable, 
-                                               :if_unsaved => (opts[:writable]==false ? :forget : :save)}))
+            book.send :apply_options, file, opts.merge({:read_only => !was_writable, 
+                                            :if_unsaved => (opts[:writable]==false ? :forget : :save)})
           end
           was_open = open_opts[:was_open]
           if was_open
@@ -804,28 +816,16 @@ module RobustExcelOle
           if sheet
             sheet.Copy({ after_or_before.to_s => base_sheet.ole_worksheet })
           else
-            @ole_workbook.Worksheets.Add({ after_or_before.to_s => base_sheet.ole_worksheet })
+            ole_workbook.Worksheets.Add({ after_or_before.to_s => base_sheet.ole_worksheet })
           end
         else
           if after_or_before == :before 
-            if sheet
-              sheet.Copy(base_sheet.ole_worksheet)
-            else
-              ole_workbook.Worksheets.Add(base_sheet.ole_worksheet)
-            end
+            add_or_copy_sheet_simple(sheet,base_sheet)
           else
             if base_sheet.name != last_sheet_local.name
-              if sheet
-                sheet.Copy(base_sheet.Next)
-              else
-                ole_workbook.Worksheets.Add(base_sheet.Next)
-              end
+              add_or_copy_sheet_simple(sheet,base_sheet.Next)
             else
-              if sheet
-                sheet.Copy(base_sheet.ole_worksheet)  
-              else
-                ole_workbook.Worksheets.Add(base_sheet.ole_worksheet) 
-              end
+              add_or_copy_sheet_simple(sheet,base_sheet)
               base_sheet.Move(ole_workbook.Worksheets.Item(ole_workbook.Worksheets.Count-1))
               ole_workbook.Worksheets.Item(ole_workbook.Worksheets.Count).Activate
             end
@@ -834,11 +834,22 @@ module RobustExcelOle
       rescue WIN32OLERuntimeError, NameNotFound, Java::OrgRacobCom::ComFailException
         raise WorksheetREOError, "could not add given worksheet #{sheet.inspect}"
       end
-      ole_sheet = ole_workbook.Activesheet
-      new_sheet = worksheet_class.new(ole_sheet)
+      new_sheet = worksheet_class.new(ole_workbook.Activesheet)
       new_sheet.name = new_sheet_name if new_sheet_name
       new_sheet
     end
+
+  private
+  
+    def add_or_copy_sheet_simple(sheet,base_sheet)
+      if sheet
+        sheet.Copy(base_sheet.ole_worksheet)  
+      else
+        ole_workbook.Worksheets.Add(base_sheet.ole_worksheet) 
+      end
+    end  
+
+  public
 
     # for compatibility to older versions
     def add_sheet(sheet = nil, opts = { })
@@ -877,19 +888,7 @@ module RobustExcelOle
     def for_this_workbook(opts)
       return unless alive?
       self.class.process_options(opts, :use_defaults => false)
-      visible_before = visible
-      check_compatibility_before = check_compatibility
-      unless opts[:read_only].nil?
-        # if the ReadOnly status shall be changed, then close and reopen it
-        if (!writable && !(opts[:read_only])) || (writable && opts[:read_only])
-          opts[:check_compatibility] = check_compatibility if opts[:check_compatibility].nil?
-          close(:if_unsaved => true)
-          open_or_create_workbook(@stored_filename, opts)
-        end
-      end
-      self.visible = opts[:force][:visible].nil? ? visible_before : opts[:force][:visible]
-      self.CheckCompatibility = opts[:check_compatibility].nil? ? check_compatibility_before : opts[:check_compatibility]
-      @excel.calculation = opts[:calculation] unless opts[:calculation].nil?
+      self.send :apply_options, @stored_filename, opts
     end
 
     # brings workbook to foreground, makes it available for heyboard inputs, makes the Excel instance visible
@@ -1056,6 +1055,47 @@ module RobustExcelOle
 
 public
 
+  # @private
+  class WorkbookBlocked < WorkbookREOError         
+  end
+
+  # @private
+  class WorkbookNotSaved < WorkbookREOError        
+  end
+
+  # @private
+  class WorkbookReadOnly < WorkbookREOError        
+  end
+
+  # @private
+  class WorkbookBeingUsed < WorkbookREOError       
+  end
+
+  # @private
+  class WorkbookConnectingUnsavedError < WorkbookREOError        
+  end
+
+  # @private
+  class WorkbookConnectingBlockingError < WorkbookREOError       
+  end
+
+  # @private
+  class WorkbookConnectingUnknownError < WorkbookREOError       
+  end
+
+  # @private
+  class FileAlreadyExists < FileREOError           
+  end
+
+  # @private
+  class FileNameNotGiven < FileREOError            
+  end
+
+  # @private
+  class FileNotFound < FileREOError                
+  end
+  
+  
   Book = Workbook
 
 end

@@ -51,91 +51,7 @@ module RobustExcelOle
   end
 
   # @private
-  class ExcelDamaged < ExcelREOError               
-  end
-
-  # @private
-  class UnsavedWorkbooks < ExcelREOError           
-  end
-
-  # @private
-  class WorkbookBlocked < WorkbookREOError         
-  end
-
-  # @private
-  class WorkbookNotSaved < WorkbookREOError        
-  end
-
-  # @private
-  class WorkbookReadOnly < WorkbookREOError        
-  end
-
-  # @private
-  class WorkbookBeingUsed < WorkbookREOError       
-  end
-
-  # @private
-  class WorkbookConnectingUnsavedError < WorkbookREOError        
-  end
-
-  # @private
-  class WorkbookConnectingBlockingError < WorkbookREOError       
-  end
-
-  # @private
-  class WorkbookConnectingUnknownError < WorkbookREOError       
-  end
-
-  # @private
-  class FileNotFound < FileREOError                
-  end
-
-  # @private
-  class FileNameNotGiven < FileREOError            
-  end
-
-  # @private
-  class FileAlreadyExists < FileREOError           
-  end
-
-  # @private
-  class NameNotFound < NamesREOError               
-  end
-
-  # @private
-  class NameAlreadyExists < NamesREOError          
-  end
-
-  # @private
-  class RangeNotEvaluatable < MiscREOError         
-  end
-
-  # @private
-  class RangeNotCreated < MiscREOError             
-  end
-
-  # @private
-  class RangeNotCopied < MiscREOError              
-  end
-
-  # @private
-  class OptionInvalid < MiscREOError               
-  end
-
-  # @private
-  class ObjectNotAlive < MiscREOError              
-  end
-
-  # @private
   class TypeREOError < REOError                    
-  end
-
-  # @private
-  class TimeOut < REOError                         
-  end
-
-  # @private
-  class AddressToolInvalid < REOError                  
   end
 
   # @private
@@ -145,13 +61,14 @@ module RobustExcelOle
   # @private
   class NotImplementedREOError < REOError          
   end
+    
 
   class REOCommon
 
     # @private
-    def excel
-      raise TypeREOError, 'receiver instance is neither an Excel nor a Workbook'
-    end
+    #def excel
+    #  raise TypeREOError, 'receiver instance is neither an Excel nor a Workbook'
+    #end
 
     # @private
     def own_methods
