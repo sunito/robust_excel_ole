@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 require File.join(File.dirname(__FILE__), './spec_helper')
-require File.expand_path( '../../lib/robust_excel_ole/reo_common', __FILE__)
+require File.expand_path( '../../lib/robust_excel_ole/base', __FILE__)
 
 $VERBOSE = nil
 
@@ -10,7 +10,7 @@ include RobustExcelOle
 
 module RobustExcelOle
 
-  describe REOCommon do
+  describe Base do
 
     before(:all) do
       excel = Excel.new(:reuse => true)
@@ -40,12 +40,12 @@ module RobustExcelOle
 
       it "should put some number" do
         a = 4
-        REOCommon::trace "some text #{a}"
+        Base::trace "some text #{a}"
       end
 
       it "should put another text" do
         b = Workbook.open(@simple_file)
-        REOCommon::trace "book: #{b}"
+        Base::trace "book: #{b}"
       end
     end
 
@@ -87,21 +87,21 @@ module RobustExcelOle
       it "should" do
 
         LOG_TO_STDOUT = true
-        REOCommon::trace "foo"
+        Base::trace "foo"
 
         LOG_TO_STDOUT = false
-        REOCommon::trace "foo"
+        Base::trace "foo"
 
         REO_LOG_DIR = ""
-        REOCommon::trace "foo"
+        Base::trace "foo"
 
         #REO_LOG_DIR = "C:"
-        #REOCommon::trace "foo"
+        #Base::trace "foo"
 
-        REOCommon::tr1 "foo"
+        Base::tr1 "foo"
 
         h = {:a => {:c => 4}, :b => 2}
-        REOCommon::puts_hash(h)
+        Base::puts_hash(h)
 
       end
  

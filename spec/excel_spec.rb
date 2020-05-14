@@ -23,6 +23,11 @@ module RobustExcelOle
       @invalid_name_file = 'b/workbook.xls'
       @simple_file1 = @simple_file
       @different_file1 = @different_file
+      @error_unsaved_workbooks = "Excel contains unsaved workbooks" +
+              "\nHint: Use option :if_unsaved with values :forget and :save to close the 
+           Excel instance without or with saving the unsaved workbooks before, respectively"
+      @error_invalid_option = ":if_unsaved: invalid option: :invalid_option" +
+              "\nHint: Valid values are :raise, :forget, :save and :alert"
     end
 
     after do
@@ -627,15 +632,13 @@ module RobustExcelOle
             @excel2 = book2.excel
             sheet2 = book2.sheet(1)
             @old_cell_value2 = sheet2[1,1].Value
-            sheet2[1,1] = sheet2[1,1].Value == "foo" ? "bar" : "foo"
+            sheet2[1,1] = sheet2[1,1].Value == "foo" ? "bar" : "foo"            
           end
 
           it "should close the first Excel without unsaved workbooks and then raise an error" do
             expect{
               Excel.close_all(:if_unsaved => :raise)
-            }.to raise_error(UnsavedWorkbooks, "Excel contains unsaved workbooks" +
-              "\nHint: Use option :if_unsaved with values :forget and :save to close the 
-           Excel instance without or with saving the unsaved workbooks before, respectively")
+            }.to raise_error(UnsavedWorkbooks, @error_unsaved_workbooks)
             sleep 0.2
             @excel1.should_not be_alive
             @excel2.should be_alive
@@ -648,9 +651,7 @@ module RobustExcelOle
           it "should close the first Excel without unsaved workbooks and then raise an error" do
             expect{
               Excel.close_all
-            }.to raise_error(UnsavedWorkbooks, "Excel contains unsaved workbooks" +
-              "\nHint: Use option :if_unsaved with values :forget and :save to close the 
-           Excel instance without or with saving the unsaved workbooks before, respectively")
+            }.to raise_error(UnsavedWorkbooks, @error_unsaved_workbooks)
             sleep 0.2
             @excel1.should_not be_alive
             @excel2.should be_alive
@@ -687,8 +688,7 @@ module RobustExcelOle
           it "should raise an error for invalid option" do
             expect {
               Excel.close_all(:if_unsaved => :invalid_option)
-            }.to raise_error(OptionInvalid, ":if_unsaved: invalid option: :invalid_option" +
-              "\nHint: Valid values are :raise, :forget, :save and :alert") 
+            }.to raise_error(OptionInvalid, @error_invalid_option) 
           end
         end
 
@@ -705,9 +705,7 @@ module RobustExcelOle
           it "should close the 1st and 3rd Excel instances that have saved workbooks" do  
             expect{
               Excel.close_all(:if_unsaved => :raise)
-            }.to raise_error(UnsavedWorkbooks, "Excel contains unsaved workbooks" +
-              "\nHint: Use option :if_unsaved with values :forget and :save to close the 
-           Excel instance without or with saving the unsaved workbooks before, respectively")
+            }.to raise_error(UnsavedWorkbooks, @error_unsaved_workbooks)
             sleep 0.2
             @book1.excel.should_not be_alive
             @book2.excel.should be_alive
@@ -732,9 +730,7 @@ module RobustExcelOle
           it "should close three Excel instances that have saved workbooks" do  
             expect{
               Excel.close_all(:if_unsaved => :raise)
-            }.to raise_error(UnsavedWorkbooks, "Excel contains unsaved workbooks" +
-              "\nHint: Use option :if_unsaved with values :forget and :save to close the 
-           Excel instance without or with saving the unsaved workbooks before, respectively")
+            }.to raise_error(UnsavedWorkbooks, @error_unsaved_workbooks)
             sleep 0.2
             expect{
               @ole_xl.Name
@@ -812,17 +808,13 @@ module RobustExcelOle
         it "should raise an error" do
           expect{
             @excel.close(:if_unsaved => :raise)
-          }.to raise_error(UnsavedWorkbooks, "Excel contains unsaved workbooks" +
-            "\nHint: Use option :if_unsaved with values :forget and :save to close the 
-           Excel instance without or with saving the unsaved workbooks before, respectively")
+          }.to raise_error(UnsavedWorkbooks, @error_unsaved_workbooks)
         end        
 
         it "should raise an error per default" do
           expect{
             @excel.close(:if_unsaved => :raise)
-          }.to raise_error(UnsavedWorkbooks, "Excel contains unsaved workbooks" +
-            "\nHint: Use option :if_unsaved with values :forget and :save to close the 
-           Excel instance without or with saving the unsaved workbooks before, respectively")
+          }.to raise_error(UnsavedWorkbooks, @error_unsaved_workbooks)
         end        
 
         it "should close the Excel without saving the workbook" do
@@ -865,8 +857,7 @@ module RobustExcelOle
         it "should raise an error for invalid option" do
           expect {
             @excel.close(:if_unsaved => :invalid_option)
-          }.to raise_error(OptionInvalid, ":if_unsaved: invalid option: :invalid_option" +
-            "\nHint: Valid values are :raise, :forget, :save and :alert") 
+          }.to raise_error(OptionInvalid, @error_invalid_option) 
         end
       end
 
@@ -955,18 +946,13 @@ module RobustExcelOle
         it "should raise error" do
           expect{
             @excel.close_workbooks(:if_unsaved => :raise)
-          }.to raise_error(UnsavedWorkbooks, "Excel contains unsaved workbooks" +
-          "\nHint: Use option :if_unsaved with values :forget and :save to close the 
-           Excel instance without or with saving the unsaved workbooks before, respectively" )
-
+          }.to raise_error(UnsavedWorkbooks, @error_unsaved_workbooks)
         end
 
         it "should raise error per default" do
           expect{
             @excel.close_workbooks
-          }.to raise_error(UnsavedWorkbooks, "Excel contains unsaved workbooks" +
-            "\nHint: Use option :if_unsaved with values :forget and :save to close the 
-           Excel instance without or with saving the unsaved workbooks before, respectively")
+          }.to raise_error(UnsavedWorkbooks, @error_unsaved_workbooks)
         end
 
         it "should close the workbook with forgetting the workbook" do
@@ -994,8 +980,7 @@ module RobustExcelOle
         it "should raise an error for invalid option" do
           expect {
             @excel.close_workbooks(:if_unsaved => :invalid_option)
-          }.to raise_error(OptionInvalid, ":if_unsaved: invalid option: :invalid_option" +
-            "\nHint: Valid values are :raise, :forget, :save and :alert") 
+          }.to raise_error(OptionInvalid, @error_invalid_option) 
         end
       end
     end
@@ -2018,239 +2003,6 @@ module RobustExcelOle
 
       end
     end
-
-    context "setting the name of a range" do
-
-       before do
-        @book1 = Workbook.open(@dir + '/another_workbook.xls', :read_only => true, :visible => true)
-        @book1.excel.displayalerts = false
-        @excel1 = @book1.excel
-      end
-
-      after do
-        @book1.close
-      end   
-
-      it "should name an unnamed range with a giving address" do
-        @excel1.add_name("foo",[1,2])
-        @excel1.Names.Item("foo").Name.should == "foo"
-        @excel1.Names.Item("foo").Value.should == "=Sheet1!$B$1:$B$1"
-      end
-
-      it "should rename an already named range with a giving address" do
-        @excel1.add_name("foo",[1,1])
-        @excel1.Names.Item("foo").Name.should == "foo"
-        @excel1.Names.Item("foo").Value.should == "=Sheet1!$A$1:$A$1"
-      end
-
-      it "should raise an error" do
-        expect{
-          @excel1.add_name("foo", [-2, 1])
-        }.to raise_error(RangeNotEvaluatable, /cannot add name "foo" to range/)
-      end
-
-      it "should rename a range" do
-        @excel1.add_name("foo",[1,1])
-        @excel1.rename_range("foo","bar")
-        @excel1.namevalue_glob("bar").should == "foo"
-      end
-
-      it "should delete a name of a range" do
-        @excel1.add_name("foo",[1,1])
-        @excel1.delete_name("foo")
-        expect{
-          @excel1.namevalue_glob("foo")
-        }.to raise_error(NameNotFound, /name "foo"/)
-      end
-
-      it "should add a name of a rectangular range" do
-        @excel1.add_name("foo",[1..3,1..4])
-        @excel1["foo"].should == [["foo", "workbook", "sheet1", nil], ["foo", 1.0, 2.0, 4.0], ["matz", 3.0, 4.0, 4.0]] 
-      end
-
-      it "should accept the old interface" do
-        @excel1.add_name("foo",1..3,1..4)
-        @excel1["foo"].should == [["foo", "workbook", "sheet1", nil], ["foo", 1.0, 2.0, 4.0], ["matz", 3.0, 4.0, 4.0]] 
-      end
-
-      it "should add a name of an infinite row range" do
-        @excel1.add_name("foo",[1..3, nil])
-        @excel1.Names.Item("foo").Value.should == "=Sheet1!$1:$3"
-      end
-
-      it "should add a name of an infinite column range" do
-        @excel1.add_name("foo",[nil, "A".."C"])
-        @excel1.Names.Item("foo").Value.should == "=Sheet1!$A:$C"
-      end
-
-      it "should add a name of an infinite row range" do
-        @excel1.add_name("foo",[nil, 1..3])
-        @excel1.Names.Item("foo").Value.should == "=Sheet1!$A:$C"
-      end
-
-      it "should add a name of an infinite column range" do
-        @excel1.add_name("foo",["A:C"])
-        @excel1.Names.Item("foo").Value.should == "=Sheet1!$A:$C"
-      end
-
-      it "should add a name of an infinite column range" do
-        @excel1.add_name("foo",["1:2"])
-        @excel1.Names.Item("foo").Value.should == "=Sheet1!$1:$2"
-      end
-
-    end
-
-    describe "namevalue_glob, set_namevalue_glob" do
-
-      before do
-        @book1 = Workbook.open(@dir + '/another_workbook.xls')
-        @book1.Windows(@book1.Name).Visible = true
-        @excel1 = @book1.excel
-      end
-
-      after do
-        @book1.close(:if_unsaved => :forget)
-      end   
-
-      it "should return value of a defined name" do
-        @excel1.namevalue_glob("firstcell").should == "foo"
-        @excel1["firstcell"].should == "foo"
-      end        
-
-      #it "should evaluate a formula" do
-      #  @excel1.namevalue_glob("named_formula").should == 4
-      #  @excel1["named_formula"].should == 4
-      #end
-
-      it "should raise an error if name not defined" do
-        expect {
-          @excel1.namevalue_glob("foo")
-        }.to raise_error(NameNotFound, /name "foo"/)
-        expect {
-        @excel1["foo"]
-        }.to raise_error(NameNotFound, /name "foo"/)
-        expect {
-          excel2 = Excel.create
-          excel2.namevalue_glob("one")
-        }.to raise_error(NameNotFound, /name "one"/)
-        expect {
-          excel3 = Excel.create(:visible => true)
-          excel3["one"]
-        }.to raise_error(NameNotFound, /name "one"/)
-      end
-
-      it "should set a range to a value" do
-        @excel1.namevalue_glob("firstcell").should == "foo"
-        @excel1.set_namevalue_glob("firstcell","bar")
-        @excel1.namevalue_glob("firstcell").should == "bar"
-        @excel1["firstcell"] = "foo"
-        @excel1.namevalue_glob("firstcell").should == "foo"
-      end
-
-      it "should raise an error if name cannot be evaluated" do
-        expect{
-          @excel1.set_namevalue_glob("foo", 1)
-          }.to raise_error(RangeNotEvaluatable, /cannot assign value to range named "foo"/)
-        expect{
-          @excel1["foo"] = 1
-          }.to raise_error(RangeNotEvaluatable, /cannot assign value to range named "foo"/)
-      end
-
-      it "should color the cell (deprecated)" do
-        @excel1.set_namevalue_glob("firstcell", "foo")
-        @book1.Names.Item("firstcell").RefersToRange.Interior.ColorIndex.should == -4142 
-        @excel1.set_namevalue_glob("firstcell", "foo", :color => 4)
-        @book1.Names.Item("firstcell").RefersToRange.Interior.ColorIndex.should == 4
-        @excel1["firstcell"].should == "foo"
-        @excel1["firstcell"] = "foo"
-        @excel1.Names.Item("firstcell").RefersToRange.Interior.ColorIndex.should == 42
-        @book1.save
-      end
-
-      it "should color the cell" do
-        @excel1.set_namevalue_glob("firstcell", "foo")
-        @book1.Names.Item("firstcell").RefersToRange.Interior.ColorIndex.should == -4142 
-        @excel1.set_namevalue_glob("firstcell", "foo", :color => 4)
-        @book1.Names.Item("firstcell").RefersToRange.Interior.ColorIndex.should == 4
-        @excel1["firstcell"].should == "foo"
-        @excel1["firstcell"] = "foo"
-        @excel1.Names.Item("firstcell").RefersToRange.Interior.ColorIndex.should == 42
-        @book1.save
-      end
-
-
-    end
-
-    describe "namevalue, set_namevalue" do
-      
-      before do
-        @book1 = Workbook.open(@another_simple_file)
-        @excel1 = @book1.excel
-        # for some reason the workbook must be visible
-        @book1.visible = true
-      end
-
-      after do
-        @book1.close(:if_unsaved => :forget)
-      end   
-
-      it "should return value of a locally defined name" do
-        @excel1.namevalue("firstcell").should == "foo"          
-      end        
-
-      it "should return value of a defined name" do
-        @excel1.namevalue("new").should == "foo"         
-        @excel1.namevalue("one").should == 1.0    
-        @excel1.namevalue("four").should == [[1,2],[3,4]]
-        @excel1.namevalue("firstrow").should == [[1,2]]
-      end    
-
-      it "should return default value if name not defined and default value is given" do
-        @excel1.namevalue("foo", :default => 2).should == 2
-      end
-
-      it "should raise an error if name not defined for the sheet" do
-        expect {
-          @excel1.namevalue("foo")
-          }.to raise_error(NameNotFound, /name "foo" not in/)
-        expect {
-          @excel1.namevalue("named_formula")
-          }.to raise_error(NameNotFound, /name "named_formula" not in/)
-        expect {
-          excel2 = Excel.create
-          excel2.namevalue("one")
-        }.to raise_error(NameNotFound, /name "one" not in/)
-      end
-    
-      it "should set a range to a value" do
-        @excel1.namevalue("firstcell").should == "foo"
-        @excel1.set_namevalue("firstcell","bar")
-        @excel1.namevalue("firstcell").should == "bar"
-      end
-
-      it "should raise an error if name cannot be evaluated" do
-        expect{
-          @excel1.set_namevalue_glob("foo", 1)
-        }.to raise_error(RangeNotEvaluatable, /cannot assign value to range named "foo" in/)
-      end
-
-      it "should color the cell (depracated)" do
-        @excel1.set_namevalue("firstcell", "foo")
-        @book1.Names.Item("firstcell").RefersToRange.Interior.ColorIndex.should == -4142 
-        @excel1.set_namevalue("firstcell", "foo", :color => 4)
-        @book1.Names.Item("firstcell").RefersToRange.Interior.ColorIndex.should == 4
-      end
-
-      it "should color the cell" do
-        @excel1.set_namevalue("firstcell", "foo")
-        @book1.Names.Item("firstcell").RefersToRange.Interior.ColorIndex.should == -4142 
-        @excel1.set_namevalue("firstcell", "foo", :color => 4)
-        @book1.Names.Item("firstcell").RefersToRange.Interior.ColorIndex.should == 4
-      end
-
-
-    end
-
   end
 end
 

@@ -16,7 +16,7 @@ module RobustExcelOle
   # that you would apply for an Application object. 
   # See https://docs.microsoft.com/en-us/office/vba/api/excel.application(object)#methods
 
-  class Excel < RangeOwners
+  class Excel < VbaObjects
     attr_reader :ole_excel
     attr_reader :properties
     attr_reader :address_tool
@@ -712,6 +712,8 @@ module RobustExcelOle
       return @workbook unless @workbook.nil?
       @workbook = workbook_class.new(@ole_excel.ActiveWorkbook)
     end    
+
+    alias_method :active_workbook, :workbook
 
     # @private
     def to_s            

@@ -63,12 +63,7 @@ module RobustExcelOle
   end
     
 
-  class REOCommon
-
-    # @private
-    #def excel
-    #  raise TypeREOError, 'receiver instance is neither an Excel nor a Workbook'
-    #end
+  class Base
 
     # @private
     def own_methods
