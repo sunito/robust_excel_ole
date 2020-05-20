@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+require File.join(File.dirname(__FILE__), './range')
+
 module RobustExcelOle
 
   class Cell < Range
@@ -7,6 +9,7 @@ module RobustExcelOle
 
     def initialize(win32_cell)
       @ole_cell = win32_cell.MergeCells ? win32_cell.MergeArea.Item(1,1) : win32_cell
+      #ole_cell(win32_cell)
       super
     end
 
@@ -17,6 +20,10 @@ module RobustExcelOle
     def v=(value)
       self.Value = value
     end
+
+    #def ole_cell(win32_cell)
+    #  win32_cell.MergeArea.Item(1,1) if win32_cell.MergeCells
+    #end
 
   private
 

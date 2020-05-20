@@ -783,10 +783,20 @@ module RobustExcelOle
       raise NameNotFound, "could not return a sheet with name #{name.inspect}"
     end
 
+    def worksheets_count
+      @ole_workbook.Worksheets.Count
+    end
+
     def each
       @ole_workbook.Worksheets.each do |sheet|
         yield worksheet_class.new(sheet)
       end
+    end
+
+    def worksheets
+      result = []
+      each { |worksheet| result << worksheet }   
+      result
     end
 
     def each_with_index(offset = 0)
@@ -813,24 +823,18 @@ module RobustExcelOle
       new_sheet_name = opts.delete(:as)
       last_sheet_local = last_sheet
       after_or_before, base_sheet = opts.to_a.first || [:after, last_sheet_local]
+      base_sheet_ole = base_sheet.ole_worksheet
       begin
         if !::COPYSHEETS_JRUBY_BUG          
-          #if sheet
-          #  sheet.Copy({ after_or_before.to_s => base_sheet.ole_worksheet })
-          #else
-          #  ole_workbook.Worksheets.Add({ after_or_before.to_s => base_sheet.ole_worksheet })
-          #end
-          add_or_copy_sheet_simple(sheet, { after_or_before.to_s => base_sheet.ole_worksheet })
+          add_or_copy_sheet_simple(sheet, { after_or_before.to_s => base_sheet_ole })
         else
           if after_or_before == :before 
-            #add_or_copy_sheet_simple(sheet,base_sheet)
-            add_or_copy_sheet_simple(sheet, base_sheet.ole_worksheet)
+            add_or_copy_sheet_simple(sheet, base_sheet_ole)
           else
             if base_sheet.name != last_sheet_local.name
               add_or_copy_sheet_simple(sheet, base_sheet.Next)
             else
-              #add_or_copy_sheet_simple(sheet,base_sheet)
-              add_or_copy_sheet_simple(sheet, base_sheet.ole_worksheet)
+              add_or_copy_sheet_simple(sheet, base_sheet_ole)
               base_sheet.Move(ole_workbook.Worksheets.Item(ole_workbook.Worksheets.Count-1))
               ole_workbook.Worksheets.Item(ole_workbook.Worksheets.Count).Activate
             end
@@ -846,19 +850,11 @@ module RobustExcelOle
 
   private
   
-    #def add_or_copy_sheet_simple(sheet, base_sheet)
-    #  if sheet
-    #    sheet.Copy(base_sheet.ole_worksheet)  
-    #  else
-    #    ole_workbook.Worksheets.Add(base_sheet.ole_worksheet) 
-    #  end
-    #end  
-
-    def add_or_copy_sheet_simple(sheet, base_ole_worksheet)
+    def add_or_copy_sheet_simple(sheet, base_sheet_ole_or_hash)
       if sheet
-        sheet.Copy(base_ole_worksheet)  
+        sheet.Copy(base_sheet_ole_or_hash)  
       else
-        ole_workbook.Worksheets.Add(base_ole_worksheet) 
+        ole_workbook.Worksheets.Add(base_sheet_ole_or_hash) 
       end
     end 
 

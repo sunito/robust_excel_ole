@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+
 module RobustExcelOle
 
   # This class essentially wraps a Win32Ole Range object. 
@@ -17,10 +18,25 @@ module RobustExcelOle
     end
 
     def each
-      @ole_range.each do |row_or_column|
-        yield RobustExcelOle::Cell.new(row_or_column)
+      @ole_range.each_with_index do |ole_cell, index|
+        yield cell(index){ole_cell}
       end
     end
+
+    def [] index
+      cell(index) {
+        @ole_range.Cells.Item(index + 1)
+      }
+    end
+
+  private
+
+    def cell(index)
+      @cells ||= []
+      @cells[index + 1] ||= RobustExcelOle::Cell.new(yield)
+    end
+
+  public
 
     # returns flat array of the values of a given range
     # @params [Range] a range
@@ -82,10 +98,8 @@ module RobustExcelOle
       end
     end
 
-    def [] index
-      @cells = []
-      @cells[index + 1] = RobustExcelOle::Cell.new(@ole_range.Cells.Item(index + 1))
-    end
+    alias_method :value, :v
+    alias_method :value=, :v=
 
     # copies a range
     # @params [Address or Address-Array] address or upper left position of the destination range
