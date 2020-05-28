@@ -14,9 +14,22 @@ Library references are supported.
 RobustExcelOle works by sending VBA methods via Win32OLE. 
 Therefore, it runs on Windows only.
 
-== Current Changes
+== Feature list
 
-  We just want to inform that we dropped the possibility to operate on ranges directly from an Excel instance. However, you can use the method Excel.active_workbook to do so.
+- opening and processing workbooks across various Excel instances
+- reading and writing workbooks (cells and ranges)
+- reopening and unobtrusively opening workbooks
+- convenient methods for standard tasks (like opening, reading, writing, closing, saving workbooks, naming, adding, and copying ranges and worksheets)
+- dealing with various cases of Excel and user behaviour, e.g. managing conflicts when opening workbooks (e.g. blocking or unsaved workbooks),
+  even with simultanously happening user interactions
+- workarounds for Excel bugs and JRuby bugs
+- various workbook formats, e.g. .xlsx, .xls, .xlsm are supported
+- library references are supported
+- console for convenient usage
+
+== What's new?
+
+  - removing methods to operate on ranges directly from an Excel instance. However, you can use the method Excel.active_workbook to do so.
   See ChangeLogs.
 
 == Requirements
