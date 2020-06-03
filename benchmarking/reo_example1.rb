@@ -12,7 +12,6 @@ workbook.each do |worksheet|
   num_rows = 0
 
   worksheet.each_row do |row|
-  	puts "row: #{row.class}"
     row_cells = row.map{ |cell| cell.value }
     num_rows += 1
 

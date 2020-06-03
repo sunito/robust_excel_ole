@@ -18,7 +18,6 @@ worksheets.each do |worksheet|
 
   worksheet.rows.each do |row|
     row_cells = row
-    puts row_cells
     num_rows += 1
 
     # uncomment to print out row values
