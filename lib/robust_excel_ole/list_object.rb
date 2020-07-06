@@ -13,69 +13,90 @@ module RobustExcelOle
   class ListObject < VbaObjects
 
     attr_reader :ole_table
-    attr_reader :table
 
-    def initialize(worksheet,
-                   rows_count = 1, 
-                   columns_count_or_names = 1, 
+    # constructs a list object (or table).
+    # @param [Variable] worksheet_or_ole_listobject  a worksheet or a Win32Ole list object
+    # @param [Variable] table_name_or_number         a table name or table number
+    # @param [Array]    position                     a position of the upper left corner
+    # @param [Integer]  rows_count                   number of rows
+    # @param [Variable] columns_count_or_names       number of columns or array of column names
+    # @return [ListObject] a ListObject object
+    def initialize(worksheet_or_ole_listobject,
+                   table_name_or_number = "",
                    position = [1,1],
-                   table_name = "")
-      # vba representation
-      columns_count = 
-        columns_count_or_names.is_a?(Integer) ? columns_count_or_names : columns_count_or_names.length 
-      column_names = columns_count_or_names.respond_to?(:first) ? columns_count_or_names : []
-      @worksheet = worksheet                # ? worksheet : worksheet_class.new(self.Parent)
-      begin
-        listobjects = @worksheet.ListObjects
-        @ole_table = listobjects.Add(XlSrcRange, 
-                                     @worksheet.range([position[0]..position[0]+rows_count-1,
-                                                position[1]..position[1]+columns_count-1]).ole_range,
-                                     XlYes)
-        @ole_table.Name = table_name
-        @ole_table.HeaderRowRange.Value = [column_names] unless column_names.empty?
-      rescue WIN32OLERuntimeError => msg # , Java::OrgRacobCom::ComFailException => msg
-        raise TableError, "error #{$!.message}"
+                   rows_count = 1, 
+                   columns_count_or_names = 1)
+                   
+      if (worksheet_or_ole_listobject.ListRows rescue nil)
+        @ole_table = worksheet_or_ole_listobject
+      else
+        @worksheet = worksheet_or_ole_listobject.to_reo
+        @ole_table = @worksheet.ListObjects.Item(table_name_or_number) rescue nil
       end
-      # reo representation
+      unless @ole_table
+        columns_count = 
+          columns_count_or_names.is_a?(Integer) ? columns_count_or_names : columns_count_or_names.length 
+        column_names = columns_count_or_names.respond_to?(:first) ? columns_count_or_names : []
+        begin
+          listobjects = @worksheet.ListObjects
+          @ole_table = listobjects.Add(XlSrcRange, 
+                                       @worksheet.range([position[0]..position[0]+rows_count-1,
+                                                  position[1]..position[1]+columns_count-1]).ole_range,
+                                       XlYes)
+          @ole_table.Name = table_name_or_number
+          @ole_table.HeaderRowRange.Value = [column_names] unless column_names.empty?
+        rescue WIN32OLERuntimeError => msg # , Java::OrgRacobCom::ComFailException => msg
+          raise TableError, "error #{$!.message}"
+        end
+      end
+
       ole_table = @ole_table
-      @table = []
-      row_class = Class.new(ListRow) do
+      @row_class = Class.new(ListRow) do
+
         @@ole_table = ole_table
 
         def initialize(row_number)
-          @row_number = row_number         
+          @ole_listrow = @@ole_table.ListRows.Item(row_number)
         end
-        
+       
         def method_missing(name, *args)
-          ole_row_range = @@ole_table.ListRows.Item(@row_number)
           column_names = @@ole_table.HeaderRowRange.Value.first
           name_before_last_equal = name.to_s.split('=').first
           columns = column_names.map{|c| c.underscore}
           if columns.include?(name_before_last_equal)
-            index = columns.index(name_before_last_equal)
-            if name.to_s[-1] != '='
-              self.send(:define_singleton_method, name) do
-                ole_row_range.Range.Value.first[index]
-              end
-            else
-              self.class.send(:define_singleton_method, name) do |value|
-                values_array = ole_row_range.Range.Value 
-                values_array.first[index] = value
-                ole_row_range.Range.Value = values_array
-              end
-            end
+            name_str = name.to_s
+            column_name = name_str.capitalize.split('=').first
+            ole_cell = @@ole_table.Application.Intersect(
+              @ole_listrow.Range, @@ole_table.ListColumns(column_name).Range)
+            define_getting_setting_method(ole_cell,name_str)            
             self.send(name, *args)
           else
             super
           end
         end
+
+        def define_getting_setting_method(ole_cell,name_str)
+          if name_str[-1] != '='
+            self.class.define_method(name_str) do
+              ole_cell.Value
+            end
+          else
+            self.class.define_method(name_str) do |value|
+              ole_cell.Value = value
+            end
+          end
+        end
       end     
-      (1..rows_count).each do |row_number|
-        row_object = row_class.new(row_number)
-        @table << row_object
+
+      # accesses a table row object
+      # @param [Integer]  a row number (>= 1)
+      # @return [ListRow] a object of dynamically constructed class with superclass ListRow 
+      def [] row_number
+        @row_class.new(row_number)
       end
+
     end
-    
+
   private
 
     def method_missing(name, *args) 
