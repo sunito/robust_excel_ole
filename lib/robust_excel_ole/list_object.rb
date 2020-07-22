@@ -58,22 +58,54 @@ module RobustExcelOle
         def initialize(row_number)
           @ole_listrow = @@ole_table.ListRows.Item(row_number)
         end
+
+        # values of the row
+        # @return [Array] values of the row
+        def values
+          begin
+            @ole_listrow.Range.Value.first
+          rescue WIN32OLERuntimeError
+            raise TableError, "could not read values"
+          end
+        end
+
+        # sets the values of the row
+        # @param [Array] values of the row
+        def set_values values
+          begin
+            values = values + [].fill(nil,0..(@@ole_table.ListColumns.Count-values.length))
+            @ole_listrow.Range.Value = [values]
+          rescue WIN32OLERuntimeError
+            raise TableError, "could not set values #{values.inspect}"
+          end
+        end
+
+        # deletes the values of the row
+        def delete_values
+          begin
+            @ole_listrow.Range.Value = [[].fill(nil,0..(@@ole_table.ListColumns.Count)-1)]
+            nil
+          rescue WIN32OLERuntimeError
+            raise TableError, "could not delete values"
+          end
+        end
        
         def method_missing(name, *args)
-          column_names = @@ole_table.HeaderRowRange.Value.first
           name_before_last_equal = name.to_s.split('=').first
-          columns = column_names.map{|c| c.underscore}
-          if columns.include?(name_before_last_equal)
-            name_str = name.to_s
-            column_name = name_str.capitalize.split('=').first
+          column_names = @@ole_table.HeaderRowRange.Value.first
+          method_names = column_names.map{|c| c.underscore.gsub(/[^[\w\d]]/, '_')}
+          column_name = column_names[method_names.index(name_before_last_equal)]
+          if column_name
             ole_cell = @@ole_table.Application.Intersect(
               @ole_listrow.Range, @@ole_table.ListColumns(column_name).Range)
-            define_getting_setting_method(ole_cell,name_str)            
+            define_getting_setting_method(ole_cell,name.to_s)            
             self.send(name, *args)
           else
             super
           end
         end
+
+      private
 
         def define_getting_setting_method(ole_cell,name_str)
           if name_str[-1] != '='
@@ -86,7 +118,7 @@ module RobustExcelOle
             end
           end
         end
-      end     
+      end
 
       # accesses a table row object
       # @param [Integer]  a row number (>= 1)
@@ -95,6 +127,185 @@ module RobustExcelOle
         @row_class.new(row_number)
       end
 
+    end
+
+    # @return [Array] a list of column names
+    def column_names
+      @ole_table.HeaderRowRange.Value.first
+    end
+
+    # adds a column    
+    # @param [String]  name of the column
+    # @param [Integer] position of the new column
+    # @param [Array]   values of the column
+    def add_column(column_name = nil, position = nil, contents = nil)
+      begin
+        new_column = @ole_table.ListColumns.Add(position)
+        new_column.Name = column_name if column_name
+        set_column_values(column_name, contents) if contents
+      rescue WIN32OLERuntimeError, TableError
+        raise TableError, ("could not add column"+ ("at position #{position.inspect} with name #{column_name.inspect}" if position))
+      end
+    end
+
+    # deletes a column
+    # @param [Variant] column number or column name
+    def delete_column(column_number_or_name)
+      begin
+        @ole_table.ListColumns.Item(column_number_or_name).Delete
+      rescue WIN32OLERuntimeError
+        raise TableError, "could not delete column #{column_number_or_name.inspect}"
+      end
+    end
+
+    # adds a row
+    # @param [Integer] position of the new row
+    # @param [Array]   values of the column
+    def add_row(position = nil, contents = nil)
+      begin
+        @ole_table.ListRows.Add(position)
+        set_row_values(position, contents) if contents
+      rescue WIN32OLERuntimeError
+        raise TableError, ("could not add row" + (" at position #{position.inspect}" if position))
+      end
+    end
+
+    # deletes a row
+    # @param [Integer] position of the old row
+    def delete_row(row_number)
+      begin
+        @ole_table.ListRows.Item(row_number).Delete
+      rescue WIN32OLERuntimeError
+        raise TableError, "could not delete row #{row_number.inspect}"
+      end
+    end
+
+    # deletes the contents of a column
+    # @param [Variant] column number or column name
+    def delete_column_values(column_number_or_name)
+      begin
+        column_name = @ole_table.ListColumns.Item(column_number_or_name).Range.Value.first
+        @ole_table.ListColumns.Item(column_number_or_name).Range.Value = [column_name] + [].fill([nil],0..(@ole_table.ListRows.Count-1))
+        nil
+      rescue WIN32OLERuntimeError
+        raise TableError, "could not delete contents of column #{column_number_or_name.inspect}"
+      end
+    end
+
+    # deletes the contents of a row
+    # @param [Integer] row number
+    def delete_row_values(row_number)
+      begin
+        @ole_table.ListRows.Item(row_number).Range.Value = [[].fill(nil,0..(@ole_table.ListColumns.Count-1))]
+        nil
+      rescue WIN32OLERuntimeError
+        raise TableError, "could not delete contents of row #{row_number.inspect}"
+      end
+    end
+
+    # renames a row
+    # @param [String] previous name or number of the column
+    # @param [String] new name of the column   
+    def rename_column(name_or_number, new_name)
+      begin
+        @ole_table.ListColumns.Item(name_or_number).Name = new_name
+      rescue
+        raise TableError, "could not rename column #{name_or_number.inspect} to #{new_name.inspect}"
+      end
+    end
+
+    # contents of a row
+    # @param [Integer] row number
+    # @return [Array] contents of a row
+    def row_values(row_number)
+      begin
+        @ole_table.ListRows.Item(row_number).Range.Value.first
+      rescue WIN32OLERuntimeError
+        raise TableError, "could not read the values of row #{row_number.inspect}"
+      end
+    end
+
+    # sets the contents of a row
+    # @param [Integer] row number
+    # @param [Array]   values of the row
+    def set_row_values(row_number, values)
+      begin
+        #values = values + [].fill(nil,0..(@ole_table.ListColumns.Count-values.length))
+        old_values = row_values(row_number)
+        # values overwrites old_values from left to right. is there an array method?
+        values = overwrite(old_values,values)          
+        @ole_table.ListRows.Item(row_number).Range.Value = [values]
+      rescue WIN32OLERuntimeError
+        raise TableError, "could not set the values of row #{row_number.inspect}"
+      end
+    end
+
+    # @return [Array] contents of a column
+    def column_values(column_number_or_name)
+      begin
+        @ole_table.ListColumns.Item(column_number_or_name).Range.Value[1,@ole_table.ListRows.Count].flatten
+      rescue WIN32OLERuntimeError
+        raise TableError, "could not read the values of column #{column_number_or_name.inspect}"
+      end
+    end
+
+    # sets the contents of a column
+    # @param [Integer] column name or column number
+    # @param [Array]   contents of the column
+    def set_column_values(column_number_or_name, values)
+      begin
+        #values = values + [].fill(nil,0..(@ole_table.ListRows.Count-values.length))
+        old_values = column_values(column_number_or_name)
+        # values overwrites old_values from left to right. is there an array method?
+        values = overwrite(old_values,values)
+        column_name = @ole_table.ListColumns.Item(column_number_or_name).Range.Value.first
+        @ole_table.ListColumns.Item(column_number_or_name).Range.Value = column_name + values.map{|v| [v]}
+        values
+      rescue WIN32OLERuntimeError
+        raise TableError, "could not read the values of column #{column_number_or_name.inspect}"
+      end
+    end
+
+    # deletes rows that have an empty contents
+    def delete_empty_rows
+      listrows = @ole_table.ListRows
+      nil_array = [[].fill(nil,0..(@ole_table.ListColumns.Count-1))]
+      i = 1
+      while i <= listrows.Count do 
+        row = listrows.Item(i)
+        if row.Range.Value == nil_array
+          row.Delete
+        else
+          i = i+1
+        end
+      end
+    end
+
+    # deletes columns that have an empty contents
+    def delete_empty_columns
+      listcolumns = @ole_table.ListColumns
+      nil_array = [].fill([nil],0..(@ole_table.ListRows.Count-1))
+      i = 1
+      while i <= listcolumns.Count do 
+        column = listcolumns.Item(i)
+        if column.Range.Value[1..-1] == nil_array
+          column.Delete
+        else
+          i = i+1
+        end
+      end
+    end
+
+    # @private
+    def to_s    
+      @ole_table.Name.to_s
+    end
+
+    # @private
+    def inspect    
+      "#<ListObject:" + "#{@ole_table.Name}" + 
+      " size:#{@ole_table.ListRows.Count}x#{@ole_table.ListColumns.Count}" +
+      " worksheet:#{@ole_table.Parent.Name}" + " workbook:#{@ole_table.Parent.Parent.Name}" + ">"
     end
 
   private

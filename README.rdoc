@@ -11,7 +11,7 @@ It supports handling workbooks across Excel instances by keeping track of workbo
 
 Library references are supported.
 
-RobustExcelOle works by sending VBA methods via Win32OlE. 
+RobustExcelOle works by sending VBA methods via WIN32OlE. 
 Therefore, it runs on Windows only.
 
 == Features
@@ -61,7 +61,11 @@ or as a console. You can start the console via the command
 
   reo
 
-You can use the command +jreo+ if you want to start the console under jruby and if you don't want to use a version manager to switch between ruby and jruby. The call of the console will include RobustExcelOle for you.
+If you want to start the console under jruby, and if you don't want to use a version manager to switch between ruby and jruby, then use the command 
+ 
+ jreo
+
+The call of the console will include RobustExcelOle for you.
 
 The following examples can be used for both scripts and console. If you have started the console in the gem path, you can just put these examples.
 
@@ -73,10 +77,10 @@ Let's open a workbook.
 
   workbook = Workbook.open 'spec/data/workbook.xls'
 
-Now we have a Workbook object that wraps a WIN32OLE object. That is, you can send any WIN32OLE (VBA) method to it. See 
+Now we have a Workbook object that wraps a WIN32OLE object. That is, we can send any WIN32OLE (VBA) method to it. See 
 https://docs.microsoft.com/en-us/office/vba/api/excel.workbook#methods.
 
-For example, you can determine the name of the workbook.
+For example, we can determine the name of the workbook.
 
   workbook.Name 
   # => "workbook.xls"
@@ -118,11 +122,11 @@ RobustExcelOle allows unobtrusively reading and modifying workbooks, i.e. access
     # do something
   end
 
-You can also create a new, empty workbook. 
+We can also create a new, empty workbook. 
 
   Workbook.create('spec/data/new_workbook.xls', :visible => true)
 
-Moreover, you can open the workbook using a block, similar to, e.g., +File.open+. 
+Moreover, we can open the workbook using a block, similar to, e.g., +File.open+. 
 
   Workbook.open('spec/data/workbook.xls') do |workbook|
     # do something
@@ -322,25 +326,98 @@ We can define a list object (or table) from scratch.
 
 This command creates a list object in worksheet named "table 1", with upper left corner at position [1,1] (first cell), with 3 rows and the columns "Person" and "Amount".
 
-A row in this table can be accessed with help of [], e.g.
-
-  table[1]
-
-Now we can set and get the value of a cell of the table, e.g.
-
-  table[1].person = "John"
-  table[1].person
-  # => "John"
-
-Likewise we can get a table with help of an existing Win32OlE table.
+Likewise we can get a RobustExcelOle list object with help of an existing WIN32OlE list object.
 
   ole_listobject = worksheet.ListObjects.Item("Table 1")
   table = ListObject.new(ole_listobject)
 
-   r4 = t4[1]
-r4.person
-# =>
-r.person = "John"
+or
+
+  table = ole_listobject.to_reo
+
+Now we have a RobustExcelOle ListObject that wraps a WIN32OLE ListObject. So we can send any WIN32OLE (VBA) method to it. See 
+https://docs.microsoft.com/en-us/office/vba/api/excel.listobject#methods.
+
+A row in this table can be accessed with help of #[], e.g.
+
+  row1 = table[1]
+
+Now we can set and get the value of a cell of the table with help of methods that are underscored versions of the column names, e.g.
+
+  row1.person = "John"
+  row1.person
+  # => "John"
+
+We can also read and set values in a whole row, e.g.
+
+  table.row_values(1)
+  # => ["John", 40]
+
+or
+
+  table[1].values
+  # => ["John", 40]
+
+and
+
+  table.set_row_values(1, ["Herbert", 80])
+  # => ["Herbert", 80]
+
+or
+
+  table[1].set_values(["Herbert", 80])
+
+Similarly, we can read and set the values in a whole column, e.g.
+
+  table.column_values("Person")
+  # => ["John", "Peter"]
+
+and 
+
+  table.set_column_values(1, ["Herbert","Paul"])
+
+The column names we can get with help of
+
+  table.column_names
+
+A column can be renamed.
+
+  table.rename_column("Person", "Enterprise")
+
+or 
+
+  table.rename_column(1, "Enterprise")
+
+We can add rows and columns, supplying optionally their name, the position and contents. 
+
+  table.add_column("column_name")
+  table.add_column("column_name", 3)
+  table.add_column("column_name", 3, ["John", "Paul"])
+  
+  table.add_row(3)
+  table.add_row(3, ["John", 40, 2, 2004])
+
+Deleting columns and rows is done by
+
+  table.delete_column("column_name")
+  table.delete_row(3)
+
+We can delete only the contents of a column
+
+  table.delete_column_values("column_name")
+
+Similarly can delete only the contents of a row.
+
+  table.delete_row_values(2)
+
+or 
+
+  table[2].delete_values
+
+Finally we can delete empty rows and columns.
+
+  table.delete_empty_rows
+  table.delete_empty_columns
 
 === More things
 
