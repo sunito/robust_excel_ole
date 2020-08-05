@@ -14,8 +14,9 @@ module RobustExcelOle
 
     def initialize(win32_range, worksheet = nil)
       @ole_range = win32_range
-      @worksheet = worksheet ? worksheet : worksheet_class.new(self.Parent)
-      #@worksheet = worksheet_class.new(self.Parent)
+      @worksheet = worksheet ? worksheet.to_reo : worksheet_class.new(self.Parent)
+      address_r1c1 = @ole_range.AddressLocal(true,true,XlR1C1)
+      @rows, @columns = address_tool.as_integer_ranges(address_r1c1)
     end
 
     def each
@@ -64,12 +65,10 @@ module RobustExcelOle
         if !::RANGES_JRUBY_BUG
           self.Value
         else
-          address_r1c1 = self.AddressLocal(true,true,XlR1C1)
-          row, col = address_tool.as_integer_ranges(address_r1c1)
           values = []
-          row.each do |r|
+          @rows.each do |r|
             values_col = []
-            col.each{ |c| values_col << worksheet.Cells(r,c).Value}
+            @columns.each{ |c| values_col << worksheet.Cells(r,c).Value}
             values << values_col
           end
           values
@@ -85,10 +84,8 @@ module RobustExcelOle
         if !::RANGES_JRUBY_BUG
           ole_range.Value = value
         else
-          address_r1c1 = ole_range.AddressLocal(true,true,XlR1C1)
-          row, col = address_tool.as_integer_ranges(address_r1c1)
-          row.each_with_index do |r,i|
-            col.each_with_index do |c,j|
+          @rows.each_with_index do |r,i|
+            @columns.each_with_index do |c,j|
               ole_range.Cells(i+1,j+1).Value = (value.respond_to?(:first) ? value[i][j] : value)
             end
           end
@@ -107,55 +104,52 @@ module RobustExcelOle
     # @options [Worksheet] the destination worksheet
     # @options [Hash] options: :transpose, :values_only
     def copy(dest_address1, sheet_or_dest_address2 = :__not_provided, options_or_sheet = :__not_provided, not_provided_or_options = :__not_provided)
-      dest_address = if sheet_or_dest_address2.is_a?(Object::Range) or sheet_or_dest_address2.is_a?(Integer)
-        [dest_address1,sheet_or_dest_address2] 
-      else
-        dest_address1
-      end
-      dest_sheet = if sheet_or_dest_address2.is_a?(Worksheet)
-        sheet_or_dest_address2
-      else
-        if options_or_sheet.is_a?(Worksheet)
-          options_or_sheet
+      begin
+        dest_address = if sheet_or_dest_address2.is_a?(Object::Range) or sheet_or_dest_address2.is_a?(Integer)
+          [dest_address1,sheet_or_dest_address2] 
         else
-          @worksheet
+          dest_address1
         end
-      end
-      options = if options_or_sheet.is_a?(Hash)
-        options_or_sheet 
-      else
-        if not_provided_or_options.is_a?(Hash)
-          not_provided_or_options
+        dest_sheet = if sheet_or_dest_address2.is_a?(Worksheet) or sheet_or_dest_address2.is_a?(WIN32OLE)
+          sheet_or_dest_address2.to_reo
         else
-          { }
-        end
-      end
-      rows, columns = address_tool.as_integer_ranges(dest_address)
-      dest_address_is_position = (rows.min == rows.max && columns.min == columns.max)
-      dest_range_address = if (not dest_address_is_position) 
-          [rows.min..rows.max,columns.min..columns.max]
-        else
-          if (not options[:transpose])
-            [rows.min..rows.min+self.Rows.Count-1,
-             columns.min..columns.min+self.Columns.Count-1]
+          if options_or_sheet.is_a?(Worksheet) or options_or_sheet.is_a?(WIN32OLE)
+            options_or_sheet.to_reo
           else
-            [rows.min..rows.min+self.Columns.Count-1,
-             columns.min..columns.min+self.Rows.Count-1]
+            @worksheet
           end
         end
-      dest_range = dest_sheet.range(dest_range_address)
-      begin
+        options = if options_or_sheet.is_a?(Hash)
+          options_or_sheet 
+        else
+          if not_provided_or_options.is_a?(Hash)
+            not_provided_or_options
+          else
+            { }
+          end
+        end
+        rows, columns = address_tool.as_integer_ranges(dest_address)
+        dest_address_is_position = (rows.min == rows.max && columns.min == columns.max)
+        dest_range_address = if (not dest_address_is_position) 
+            [rows.min..rows.max,columns.min..columns.max]
+          else
+            if (not options[:transpose])
+              [rows.min..rows.min+self.Rows.Count-1,
+               columns.min..columns.min+self.Columns.Count-1]
+            else
+              [rows.min..rows.min+self.Columns.Count-1,
+               columns.min..columns.min+self.Rows.Count-1]
+            end
+          end
+        dest_range = dest_sheet.range(dest_range_address)
         if options[:values_only]
-          # dest_range.Value = options[:transpose] ? self.Value.transpose : self.Value
           dest_range.v = options[:transpose] ? self.v.transpose : self.v
         else
           if dest_range.worksheet.workbook.excel == @worksheet.workbook.excel 
             if options[:transpose]
               self.Copy              
-              #dest_range.PasteSpecial('transpose' => true) 
               dest_range.PasteSpecial(XlPasteAll,XlPasteSpecialOperationNone,false,true)
             else
-              #self.Copy('destination' => dest_range.ole_range)
               self.Copy(dest_range.ole_range)
             end            
           else
@@ -166,7 +160,6 @@ module RobustExcelOle
               @worksheet.workbook.excel.with_displayalerts(false) {added_sheet.Delete}
             else
               self.Copy
-              #dest_sheet.Paste('destination' => dest_range.ole_range)
               dest_sheet.Paste(dest_range.ole_range)
             end
           end
@@ -184,7 +177,7 @@ module RobustExcelOle
     def copy_special(dest_address, dest_sheet = :__not_provided, options = { })
       rows, columns = address_tool.as_integer_ranges(dest_address)
       dest_sheet = @worksheet if dest_sheet == :__not_provided
-      dest_address_is_position = (rows.min == rows.max && columns.min == columns.max)
+      dest_address_is_position = (rows.min == rows.max && @columns.min == @columns.max)
       dest_range_address = if (not dest_address_is_position) 
           [rows.min..rows.max,columns.min..columns.max]
         else
@@ -237,6 +230,16 @@ module RobustExcelOle
     # @private
     def excel
       @worksheet.workbook.excel
+    end
+
+    # @private
+    def to_s
+      "#<Range: " + "[#{@rows},#{@columns}] " + "#{worksheet.Name} " + ">"
+    end
+
+    # @private
+    def inspect
+      self.to_s
     end
 
     # @private
