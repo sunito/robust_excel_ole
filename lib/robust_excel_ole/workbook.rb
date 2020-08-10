@@ -893,7 +893,7 @@ module RobustExcelOle
     # @param [String]  name  the name of the range
     # @param [Variant] value the contents of the range
     def []= (name, value)
-      set_namevalue_glob(name, value, :color => 42)   
+      set_namevalue_glob(name, value)   
     end
 
     # sets options
@@ -922,7 +922,7 @@ module RobustExcelOle
 
     # returns the full file name of the workbook
     def filename
-      @ole_workbook.Fullname.tr('\\','/') rescue nil
+      General.canonize(@ole_workbook.Fullname.tr('\\','/')) rescue nil
     end
 
     # @private
