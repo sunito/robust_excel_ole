@@ -14,6 +14,8 @@ module RobustExcelOle
 
     attr_reader :ole_table
 
+    alias ole_object ole_table
+
     # constructs a list object (or table).
     # @param [Variable] worksheet_or_ole_listobject  a worksheet or a Win32Ole list object
     # @param [Variable] table_name_or_number         a table name or table number
@@ -361,6 +363,16 @@ module RobustExcelOle
     end
 
     # @private
+    # returns true, if the list object responds to VBA methods, false otherwise
+    def alive?
+      @ole_table.ListRows
+      true
+    rescue
+      # trace $!.message
+      false
+    end
+
+    # @private
     def to_s    
       @ole_table.Name.to_s
     end
@@ -371,6 +383,8 @@ module RobustExcelOle
       " #{@ole_table.ListRows.Count}x#{@ole_table.ListColumns.Count}" +
       " #{@ole_table.Parent.Name}" + " #{@ole_table.Parent.Parent.Name}" + ">"
     end
+
+    include MethodHelpers
 
   private
 

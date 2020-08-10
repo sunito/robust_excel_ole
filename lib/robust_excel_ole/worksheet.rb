@@ -14,6 +14,8 @@ module RobustExcelOle
     attr_reader :ole_worksheet
     attr_reader :workbook
 
+    alias ole_object ole_worksheet
+
     def initialize(win32_worksheet)
       @ole_worksheet = win32_worksheet
       if @ole_worksheet.ProtectContents
@@ -225,6 +227,16 @@ module RobustExcelOle
     end
 
     # @private
+    # returns true, if the worksheet object responds to VBA methods, false otherwise
+    def alive?
+      @ole_worksheet.UsedRange
+      true
+    rescue
+      # trace $!.message
+      false
+    end
+
+    # @private
     def self.workbook_class  
       @workbook_class ||= begin
         module_name = self.parent_name
@@ -246,8 +258,10 @@ module RobustExcelOle
 
     # @private
     def inspect  
-      self.to_s
+      self.to_s[0..-2] + "#{workbook.Name} " + ">"
     end
+
+    include MethodHelpers
 
   private
 
