@@ -5,7 +5,7 @@ module RobustExcelOle
   # This class essentially wraps a Win32Ole Range object. 
   # You can apply all VBA methods (starting with a capital letter) 
   # that you would apply for a Range object. 
-  # See https://docs.microsoft.com/en-us/office/vba/api/excel.worksheet#methods
+  # See https://docs.microsoft.com/en-us/office/vba/api/excel.range#methods
 
   class Range < VbaObjects
 
@@ -70,7 +70,9 @@ module RobustExcelOle
       end
     end
 
-    def v
+    # returns flat array of the values of a given range
+    # @returns [Array] values of the range (as a nested array)    
+    def value
       begin
         if !::RANGES_JRUBY_BUG
           self.Value
@@ -89,7 +91,9 @@ module RobustExcelOle
 
     end
 
-    def v=(value)
+    # sets the values if the range
+    # @param [Variant] value
+    def value=(value)
       begin
         if !::RANGES_JRUBY_BUG
           ole_range.Value = value
@@ -102,12 +106,33 @@ module RobustExcelOle
         end
         value
       rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg  
-        raise RangeNotEvaluatable, "cannot assign value to range #{address_r1c1.inspect}"
+        raise RangeNotEvaluatable, "cannot assign value to range #{self.inspect}"
       end
     end
 
-    alias_method :value, :v
-    alias_method :value=, :v=
+    alias_method :v, :value
+    alias_method :v=, :value=
+
+    # sets the values if the range with a given color
+    # @param [Variant] value
+    # @option opts [Symbol] :color the color of the cell when set
+    def set_value(value, opts = { })
+      begin
+        if !::RANGES_JRUBY_BUG
+          ole_range.Value = value
+        else
+          rows.each_with_index do |r,i|
+            columns.each_with_index do |c,j|
+              ole_range.Cells(i+1,j+1).Value = (value.respond_to?(:first) ? value[i][j] : value)
+            end
+          end
+        end
+        ole_range.Interior.ColorIndex = opts[:color] unless opts[:color].nil?
+        value
+      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg  
+        raise RangeNotEvaluatable, "cannot assign value to range #{self.inspect}"
+      end
+    end
 
     # copies a range
     # @params [Address or Address-Array] address or upper left position of the destination range
@@ -159,6 +184,7 @@ module RobustExcelOle
             end
           end
         end
+        dest_range
       rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
         raise RangeNotCopied, 'cannot copy range'
       end
@@ -187,12 +213,12 @@ module RobustExcelOle
 
     # @private
     def to_s
-      "#<REO::Range: " + "#{@ole_range.Address.gsub(/\$/,'')} " + "#{worksheet.Name} " + ">"
+      "#<REO::Range: " + "#{@ole_range.Address('External' => true).gsub(/\$/,'')} " + ">"
     end
 
     # @private
     def inspect
-      to_s[0..-2] + "#{worksheet.workbook.Name} " + ">"
+      to_s
     end
 
     # @private
