@@ -68,7 +68,83 @@ module General
     Pry.change_current_binding(current_object)
   end
 
-  module_function :absolute_path, :canonize, :normalize, :change_current_binding
+  def class2method
+    [{Excel => :Hwnd},
+     {Workbook => :FullName},
+     {Worksheet => :UsedRange},
+     {RobustExcelOle::Range => :Row},
+     {ListObject => :ListRows}]
+  end
+
+
+  # enable RobustExcelOle methods to Win32Ole objects
+  def uplift_to_reo
+    exclude_list = [:each, :inspect]
+    class2method.each do |element|
+      classname = element.first.first
+      method = element.first.last
+      classname.instance_methods(false).each do |inst_method|
+        if !exclude_list.include?(inst_method)
+          WIN32OLE.send(:define_method, inst_method){ |*args| self.to_reo.send(inst_method, *args) }
+        end
+      end
+    end
+    nil
+  end
+
+  module_function :absolute_path, :canonize, :normalize, :change_current_binding, :class2method, :uplift_to_reo
+
+end
+
+# @private
+class Pry
+
+  # change the current binding such that self is the current object in the pry-instance, 
+  # preserve the local variables
+
+  class << self
+    attr_accessor :pry_instance
+  end
+
+  def self.change_current_binding(current_object)
+    pry_instance = self.pry_instance
+    old_binding = pry_instance.binding_stack.pop
+    pry_instance.push_binding(current_object.__binding__)
+    exclude_vars = [:__, :_, :_dir, :_dir_, :_file, :_file_, :_in_, :_out_, :_ex, :_ex_, :pry_instance]
+    old_binding.local_variables.each do |var|
+      pry_instance.add_sticky_local(var) {old_binding.local_variable_get(var)} unless exclude_vars.include?(var)
+    end
+    self.pry_instance = pry_instance
+    nil
+  end
+
+  def push_initial_binding(target = nil)
+    # memorize the current pry instance
+    self.class.pry_instance = self 
+    push_binding(target || Pry.toplevel_binding)
+  end
+
+  class REPL
+
+    def repl
+      loop do
+        case val = read
+        when :control_c
+          output.puts ""
+          pry.reset_eval_string
+        when :no_more_input
+          output.puts "" if output.tty?
+          break
+        else
+          # overwrite repeating line (clear the line)
+          output.puts "                                                                        "
+          output.puts "" if val.nil? && output.tty?                              
+          return pry.exit_value unless pry.eval(val)
+        end
+      end
+    end
+
+  end
 
 end
 
@@ -122,14 +198,7 @@ class WIN32OLE
   
   # type-lifting WIN32OLE objects to RobustExcelOle objects
   def to_reo
-    class2method = [
-      {Excel => :Hwnd},
-      {Workbook => :FullName},
-      {Worksheet => :UsedRange},
-      {RobustExcelOle::Range => :Row},
-      {ListObject => :ListRows}
-    ]
-    class2method.each do |element|
+    General.class2method.each do |element|
       classname = element.first.first
       method = element.first.last
       begin
