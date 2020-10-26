@@ -69,16 +69,16 @@ module General
   end
 
   def class2method
-    [{Excel => :Hwnd},
-     {Workbook => :FullName},
-     {Worksheet => :UsedRange},
+    [{RobustExcelOle::Excel => :Hwnd},
+     {RobustExcelOle::Workbook => :FullName},
+     {RobustExcelOle::Worksheet => :UsedRange},
      {RobustExcelOle::Range => :Row},
-     {ListObject => :ListRows}]
+     {RobustExcelOle::ListObject => :ListRows}]
   end
 
 
   # enable RobustExcelOle methods to Win32Ole objects
-  def uplift_to_reo
+  def init_reo_for_win32ole
     exclude_list = [:each, :inspect]
     class2method.each do |element|
       classname = element.first.first
@@ -94,9 +94,10 @@ module General
     nil
   end
 
-  module_function :absolute_path, :canonize, :normalize, :change_current_binding, :class2method, :uplift_to_reo
+  module_function :absolute_path, :canonize, :normalize, :change_current_binding, :class2method, :init_reo_for_win32ole
 
 end
+
 
 # @private
 class Pry
@@ -159,7 +160,7 @@ class Pry
   end
 end
 
-# @private
+=begin
 class Integer
 
   alias old_spaceship <=>
@@ -201,6 +202,55 @@ class Array
     q
   end
 end
+=end
+
+# @private
+module RefinedSpaceship
+
+  refine Integer do
+
+    alias old_spaceship <=>
+
+    def <=> other
+      # p other
+      if other.is_a? Array
+        self <=> other.first
+      else
+        old_spaceship other
+      end
+    end
+  end
+
+  refine Array do
+
+    alias old_spaceship <=>
+
+    def <=> other
+      # p other
+      if other.is_a? Integer
+        self <=> [other]
+      else
+        old_spaceship other
+      end
+    end
+  end
+end
+
+# @private
+class Array
+
+  def find_each_index find
+    found, index, q = -1, -1, []
+    while found
+      found = self[index+1..-1].index(find)
+      if found
+        index = index + found + 1
+        q << index
+      end
+    end
+    q
+  end
+end
 
 # @private
 class WIN32OLE
@@ -225,37 +275,6 @@ class WIN32OLE
     end
     raise TypeREOError, "given object cannot be type-lifted to a RobustExcelOle object"
   end
-
-=begin
-  def to_reo
-    case ole_type.name
-    when 'Range' then RobustExcelOle::Range.new(self)
-    when '_Worksheet' then RobustExcelOle::Worksheet.new(self)
-    when '_Workbook' then RobustExcelOle::Workbook.new(self)
-    when '_Application' then RobustExcelOle::Excel.new(self)
-    else
-      self
-    end
-  end
-=end
-
-=begin
-  alias method_missing_before_implicit_typelift method_missing 
-  
-  def method_missing(name, *args, &blk)
-    puts "method_missing:"
-    puts "name: #{name.inspect}"
-    #raise NoMethodError if name.to_s == "Hwnd" or name.to_s == "FullName" or name.to_s == "UsedRange" or name.to_s == "Row" or name.to_s == "ListRows"
-    begin
-      reo_obj = self.to_reo
-      puts "reo_obj: #{reo_obj.inspect}"
-    rescue
-      puts "$!.message: #{$!.message}"
-      method_missing_before_implicit_typelift(name, *args, &blk)
-    end
-    reo_obj.send(name, *args, &blk)
-  end
-=end
 
 end
 
@@ -382,5 +401,3 @@ module MethodHelpers
     end
   end
 end
-
-REO = RobustExcelOle
