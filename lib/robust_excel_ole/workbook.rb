@@ -42,7 +42,7 @@ module RobustExcelOle
 
 
     # opens a workbook.
-    # @param [String] file_or_workbook a file name or WIN32OLE workbook
+    # @param [String,Pathname] file_or_workbook a file name (string or pathname) or WIN32OLE workbook
     # @param [Hash] opts the options
     # @option opts [Hash] :default or :d
     # @option opts [Hash] :force or :f
@@ -1025,6 +1025,8 @@ module RobustExcelOle
     def inspect    
       '#<Workbook: ' + ('not alive ' unless alive?).to_s + (File.basename(self.filename) if alive?).to_s + " #{@excel}" + '>'
     end
+
+    using RefinementModule
 
     # @private
     def self.excel_class    

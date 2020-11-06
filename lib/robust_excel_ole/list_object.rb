@@ -16,6 +16,8 @@ module RobustExcelOle
 
     alias ole_object ole_table
 
+    using RefinedArray
+
     # constructs a list object (or table).
     # @param [Variable] worksheet_or_listobject      a worksheet or a list object
     # @param [Variable] table_name_or_number         a table name or table number
@@ -39,6 +41,7 @@ module RobustExcelOle
           worksheet_or_listobject
         rescue
           @worksheet = worksheet_or_listobject.to_reo
+          puts "@worksheet: #{@worksheet.inspect}"
           @worksheet.ListObjects.Item(table_name_or_number) rescue nil
         end
       end
@@ -351,7 +354,7 @@ module RobustExcelOle
       listrows = @ole_table.ListRows      
       result = []
       (1..listrows.Count).each do |row_number|
-        row_values(row_number).find_each_index(value).each do |col_number|
+        row_values(row_number).find_all_indices(value).each do |col_number|
           result << @ole_table.Application.Intersect(listrows.Item(row_number).Range, 
                                                      @ole_table.ListColumns.Item(col_number+1).Range).to_reo
         end

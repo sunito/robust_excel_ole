@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+require 'pathname'
 
 module General
 
@@ -39,7 +40,8 @@ module General
   end  
 
   # @private
-  def absolute_path(file)    
+  def absolute_path(file)
+    file = file.to_path if file.respond_to?(:to_path)
     return file if file[0,2] == "//" 
     file[0,2] = './' if ::EXPANDPATH_JRUBY_BUG && file  =~ /[A-Z]:[^\/]/
     file = File.expand_path(file)
@@ -76,13 +78,13 @@ module General
      {RobustExcelOle::ListObject => :ListRows}]
   end
 
+  #using RefinedWIN32OLE
 
   # enable RobustExcelOle methods to Win32Ole objects
   def init_reo_for_win32ole
-    exclude_list = [:each, :inspect]
+    exclude_list = [:each, :each_with_index, :inspect, :Calculation=]
     class2method.each do |element|
       classname = element.first.first
-      method = element.first.last
       classname.instance_methods(false).each do |inst_method|
         if !exclude_list.include?(inst_method)
           WIN32OLE.send(:define_method, inst_method) do |*args, &blk|  
@@ -94,7 +96,8 @@ module General
     nil
   end
 
-  module_function :absolute_path, :canonize, :normalize, :change_current_binding, :class2method, :init_reo_for_win32ole
+  module_function :absolute_path, :canonize, :normalize, :change_current_binding, :class2method, 
+                  :init_reo_for_win32ole, :hostnameshare2networkpath
 
 end
 
@@ -160,7 +163,6 @@ class Pry
   end
 end
 
-=begin
 class Integer
 
   alias old_spaceship <=>
@@ -190,20 +192,9 @@ class Array
     end
   end
 
-  def find_each_index find
-    found, index, q = -1, -1, []
-    while found
-      found = self[index+1..-1].index(find)
-      if found
-        index = index + found + 1
-        q << index
-      end
-    end
-    q
-  end
 end
-=end
 
+=begin
 # @private
 module RefinedSpaceship
 
@@ -235,48 +226,67 @@ module RefinedSpaceship
     end
   end
 end
+=end
 
 # @private
-class Array
 
-  def find_each_index find
-    found, index, q = -1, -1, []
-    while found
-      found = self[index+1..-1].index(find)
-      if found
-        index = index + found + 1
-        q << index
+module RefinedArray
+
+  refine Array do
+
+    def find_all_indices elem
+      found, index, result = -1, -1, []
+      while found
+        found = self[index+1..-1].index(elem)
+        if found
+          index = index + found + 1
+          result << index
+        end
       end
+      result
     end
-    q
+
   end
+
 end
 
 # @private
 class WIN32OLE
 
   include Enumerable
-  
-  # type-lifting WIN32OLE objects to RobustExcelOle objects
-  def to_reo
-    General.class2method.each do |element|
-      classname = element.first.first
-      method = element.first.last
-      begin
-        self.send(method)
-        if classname == RobustExcelOle::Range && self.Rows.Count == 1 && self.Columns.Count == 1
-          return Cell.new(self, self.Parent)
-        else
-          return classname.new(self)
-        end
-      rescue
-        next
-      end
-    end
-    raise TypeREOError, "given object cannot be type-lifted to a RobustExcelOle object"
-  end
 
 end
+
+
+#module RefinedWIN32OLE
+
+ # refine WIN32OLE do
+
+  class WIN32OLE
+  
+    # type-lifting WIN32OLE objects to RobustExcelOle objects
+    def to_reo
+      General.class2method.each do |element|
+        classname = element.first.first
+        method = element.first.last
+        begin
+          self.send(method)
+          if classname == RobustExcelOle::Range && self.Rows.Count == 1 && self.Columns.Count == 1
+            return Cell.new(self, self.Parent)
+          else
+            return classname.new(self)
+          end
+        rescue
+          next
+        end
+      end
+      raise TypeREOError, "given object cannot be type-lifted to a RobustExcelOle object"
+    end
+
+  end
+
+#end
+
 
 # @private
 class ::String 
@@ -368,16 +378,20 @@ end
 
 # taken from http://api.rubyonrails.org/v2.3.8/classes/ActiveSupport/CoreExtensions/Module.html#M000806
 # @private
-class Module
-  def parent_name
-    unless defined? @parent_name
-      @parent_name = name =~ /::[^:]+\Z/ ? $`.freeze : nil
-    end
-    @parent_name
-  end
+module RefinementModule
 
-  def parent
-    parent_name ? parent_name.constantize : Object
+  refine Module do
+
+    def parent_name
+      unless defined? @parent_name
+        @parent_name = name =~ /::[^:]+\Z/ ? $`.freeze : nil
+      end
+      @parent_name
+    end
+
+    def parent
+      parent_name ? parent_name.constantize : Object
+    end
   end
 end
 
