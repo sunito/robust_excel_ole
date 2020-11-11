@@ -16,7 +16,9 @@ module RobustExcelOle
 
     alias ole_object ole_table
 
-    using RefinedArray
+    using ArrayRefinement
+    using StringRefinement
+    using WIN32OLERefinement
 
     # constructs a list object (or table).
     # @param [Variable] worksheet_or_listobject      a worksheet or a list object
@@ -41,7 +43,6 @@ module RobustExcelOle
           worksheet_or_listobject
         rescue
           @worksheet = worksheet_or_listobject.to_reo
-          puts "@worksheet: #{@worksheet.inspect}"
           @worksheet.ListObjects.Item(table_name_or_number) rescue nil
         end
       end
@@ -127,7 +128,7 @@ module RobustExcelOle
           rescue WIN32OLERuntimeError
             raise TableError, "could not delete values"
           end
-        end
+        end        
 
         def method_missing(name, *args)
           name_str = name.to_s
