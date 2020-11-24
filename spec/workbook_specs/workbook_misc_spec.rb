@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 
-require File.join(File.dirname(__FILE__), './../spec_helper')
-
+require_relative '../spec_helper'
 
 $VERBOSE = nil
 
 include RobustExcelOle
 include General
+
+using ToReoRefinement
 
 describe Workbook do
 
