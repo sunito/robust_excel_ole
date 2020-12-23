@@ -72,30 +72,12 @@ module StringRefinement
         else
           begin
             path_part = path_part.strip
-            (path_part  =~ /^(\/|([A-Z]:\/))/) ? path_part : (self + '/' + path_part).gsub('//', '/')
+            (path_part  =~ /^(\/|([A-Z]:\/))/i) ? path_part : (self.chomp('/') + '/' + path_part)
           rescue TypeError
             raise TypeError, "Only strings can be parts of paths (given: #{path_part.inspect} of class #{path_part.class})"
           end
         end
       end
-    end
-
-    # taken from http://apidock.com/rails/ActiveSupport/Inflector/underscore
-    def underscore
-      word = gsub('::', '/')
-      word.gsub!(/([A-Z\d]+)([A-Z][a-z])/,'\1_\2')
-      word.gsub!(/([a-z\d])([A-Z])/,'\1_\2')
-      word.tr!('-', '_')
-      word.downcase!
-      word
-    end
-
-    def delete_multiple_underscores
-      word = self
-      while word.index('__') do
-        word.gsub!('__','_')
-      end    
-      word
     end
 
     def replace_umlauts
@@ -112,6 +94,16 @@ module StringRefinement
       #word.gsub!(/\x99/,'Oe')
       #word.gsub!(/\x81/,'ue')
       #word.gsub!(/\x9A/,'Ue')
+      word
+    end
+
+    # taken from http://apidock.com/rails/ActiveSupport/Inflector/underscore
+    def underscore
+      word = gsub('::', '/')
+      word.gsub!(/([A-Z\d]+)([A-Z][a-z])/,'\1_\2')
+      word.gsub!(/([a-z\d])([A-Z])/,'\1_\2')
+      word.tr!('-', '_')
+      word.downcase!
       word
     end
 
@@ -251,7 +243,9 @@ module General
   # @private
   NetworkDrive = Struct.new(:drive_letter, :network_name) do
 
-    def self.get_all(drives)
+    def self.get_all_drives
+      network = WIN32OLE.new('WScript.Network')
+      drives = network.enumnetworkdrives
       ndrives = []
       count = drives.Count
       (0..(count - 1)).step(2) do |i|
@@ -259,22 +253,21 @@ module General
       end
       ndrives
     end
-
   end
 
   # @private
   def hostnameshare2networkpath(filename)
     return filename unless filename[0,2] == "//"
-    network = WIN32OLE.new('WScript.Network')
-    drives = network.enumnetworkdrives
-    network_drives = NetworkDrive.get_all(drives)
+    ind = filename[2,filename.length].index('/')
+    filename = filename[0,ind+2].upcase + filename[ind+2,filename.length]
     f_c = filename.dup
-    network_drive = network_drives.find do |d| 
+    network_drive = NetworkDrive.get_all_drives.find do |d| 
       e = f_c.sub!(d.network_name,d.drive_letter)
       return e if e
     end    
-    filename 
+    filename
   end  
+
 
   # @private
   def absolute_path(file)
@@ -335,7 +328,7 @@ module General
   end
 
   module_function :absolute_path, :canonize, :normalize, :change_current_binding, :class2method, 
-                  :init_reo_for_win32ole, :hostnameshare2networkpath
+                  :init_reo_for_win32ole, :hostnameshare2networkpath, :test
 
 end
 

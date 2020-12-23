@@ -82,7 +82,7 @@ describe Workbook do
         book2 = Workbook.open(@sub_file)
         expect{
          book2.close
-         }.to raise_error(WorkbookLinked)
+        }.to raise_error(WorkbookLinked)
       end
 
       it "should raise error when trying to change the read-only mode of the linked workbook" do
@@ -2672,8 +2672,6 @@ describe Workbook do
             }.to raise_error(UnexpectedREOError)
           @book.should be_alive
         end
-
-        
 
         it "should not open the new book and not close the unsaved book, if user answers 'no'" do
           # "No" is right to "Yes" (the  default). --> language independent
