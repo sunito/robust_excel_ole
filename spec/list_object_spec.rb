@@ -221,7 +221,7 @@ describe ListObject do
       context "with umlauts" do
 
         before do
-          @table = Table.new(@sheet, "table_name", [1,1], 3, ["Verkäufer", "Straße", "area in m³"])
+          @table = Table.new(@sheet, "table_name", [1,1], 3, ["Verkäufer", "Straße", "area in m²"])
           @table_row1 = @table[1]
         end
 
@@ -244,22 +244,6 @@ describe ListObject do
           @table_row1.area_in_m3 = 10
           @table_row1.area_in_m3.should == 10
           @sheet[2,3].Value.should == 10
-        end
-
-      end
-
-      context "with further column names" do
-
-        before do
-          @table = Table.new(@sheet, "table_name", [1,1], 3, ["2013", "dummy"])
-          @table_row1 = @table[1]
-        end
-
-        it "should read and set values via alternative column names" do
-          @table_row1._2013.should be nil
-          @table_row1._2013 = 2
-          @table_row1._2013.should == 2
-          @sheet[2,1].Value.should == 2
         end
 
       end

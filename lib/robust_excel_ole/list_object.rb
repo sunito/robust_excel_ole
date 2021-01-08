@@ -2,7 +2,8 @@
 
 module RobustExcelOle
 
-  class ListRow
+  class ListRow    
+
   end
 
   # This class essentially wraps a Win32Ole ListObject. 
@@ -135,12 +136,12 @@ module RobustExcelOle
           core_name = name_str[-1]!='=' ? name_str : name_str[0..-2]
           column_names = @@ole_table.HeaderRowRange.Value.first
           column_name = column_names.find do |c|
-            c = c.gsub(/\W/,'_')
             c == core_name ||
+            c.gsub(/\W/,'_') == core_name ||
             c.underscore == core_name ||
-            c.replace_umlauts == core_name ||
-            c.replace_umlauts.underscore == core_name ||
-            (core_name[0] == '_' && core_name[1..-1].to_i == c.to_i)
+            c.underscore.gsub(/\W/,'_') == core_name ||
+            c.replace_umlauts.gsub(/\W/,'_') == core_name ||
+            c.replace_umlauts.underscore.gsub(/\W/,'_') == core_name 
           end         
           if column_name
             appended_eq = (name_str[-1]!='=' ? "" : "=")
@@ -149,6 +150,15 @@ module RobustExcelOle
           else
             super(name, *args)
           end
+        end
+
+        def to_s    
+          "#<ListRow: " + "index:#{@ole_listrow.Index}" + " size:#{@@ole_table.ListColumns.Count}" + " #{@@ole_table.Name}" + ">"
+        end
+
+        # @private
+        def inspect    
+          to_s          
         end
 
       private
