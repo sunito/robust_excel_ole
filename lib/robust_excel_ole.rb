@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 if RUBY_PLATFORM =~ /java/
   require 'jruby-win32ole'
 else
@@ -15,6 +17,7 @@ require_relative 'robust_excel_ole/workbook'
 require_relative 'robust_excel_ole/worksheet'
 require_relative 'robust_excel_ole/cell'
 require_relative 'robust_excel_ole/range'
+require_relative 'robust_excel_ole/list_row'
 require_relative 'robust_excel_ole/list_object'
 require_relative 'robust_excel_ole/cygwin' if RUBY_PLATFORM =~ /cygwin/
 require_relative 'robust_excel_ole/version'
