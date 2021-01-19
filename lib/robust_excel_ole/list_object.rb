@@ -73,11 +73,22 @@ module RobustExcelOle
 
     end
 
+
     # accesses a table row object
-    # @param [Integer]  a row number (>= 1)
+    # @param [Variant]  a hash of key (key column: value) or a row number (>= 1) 
     # @return [ListRow] a object of dynamically constructed class with superclass ListRow 
-    def [] row_number
-      @row_class.new(row_number)
+    def [] keys_or_number
+      return @row_class.new(keys_or_number) if keys_or_number.respond_to?(:succ)
+      keys = keys_or_number      
+      begin      
+        listrows = @ole_table.ListRows       
+        row = (1..listrows.Count).find do |row_number|
+          keys.map{|k| listrows.Item(row_number).Range.Value.first[column_names.index(k[0])]==k[1]}.inject(true,:&)
+        end
+        return @row_class.new(row) if row
+      rescue
+        raise(TableError, "cannot find row with key #{keys_or_number}")
+      end
     end
 
     # @return [Array] a list of column names
@@ -117,7 +128,7 @@ module RobustExcelOle
 
     # deletes a row
     # @param [Integer] position of the old row
-    def delete_row(row_number)
+    def delete_row(row_number)                          # :nodoc: #
       begin
         @ole_table.ListRows.Item(row_number).Delete
       rescue WIN32OLERuntimeError
@@ -127,7 +138,7 @@ module RobustExcelOle
 
     # deletes a column
     # @param [Variant] column number or column name
-    def delete_column(column_number_or_name)
+    def delete_column(column_number_or_name)              # :nodoc: #
       begin
         @ole_table.ListColumns.Item(column_number_or_name).Delete
       rescue WIN32OLERuntimeError
@@ -161,7 +172,7 @@ module RobustExcelOle
     # renames a row
     # @param [String] previous name or number of the column
     # @param [String] new name of the column   
-    def rename_column(name_or_number, new_name)
+    def rename_column(name_or_number, new_name)              # :nodoc: #
       begin
         @ole_table.ListColumns.Item(name_or_number).Name = new_name
       rescue

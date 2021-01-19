@@ -82,6 +82,7 @@ module StringRefinement
 
     def replace_umlauts
       word = self.force_encoding('iso-8859-1').encode('utf-8')
+      #word = self.encode("UTF-8")
       #word = self.encode("UTF-8", "Windows-1252")    
       word.gsub('ä','ae').gsub('Ä','Ae').gsub('ö','oe').gsub('Ö','Oe').gsub('ü','ue').gsub('Ü','Ue')
       word.gsub('ß','ss').gsub('²','2').gsub('³','3')      
@@ -191,6 +192,8 @@ end
 
 module General
 
+  using ToReoRefinement
+
   IS_JRUBY_PLATFORM = (RUBY_PLATFORM =~ /java/)
   ::EXPANDPATH_JRUBY_BUG    = IS_JRUBY_PLATFORM && true
   ::CONNECT_JRUBY_BUG       = IS_JRUBY_PLATFORM && true
@@ -262,8 +265,6 @@ module General
      {RobustExcelOle::Range => :Row},
      {RobustExcelOle::ListObject => :ListRows}]
   end
-
-  #using ToReoRefinement
 
   # @private
   # enable RobustExcelOle methods to Win32Ole objects

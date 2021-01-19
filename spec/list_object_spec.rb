@@ -29,6 +29,20 @@ describe ListObject do
     rm_tmp(@dir)
   end
 
+  describe "accessing a table" do
+
+    it "should access a table via its number" do
+      table = @sheet.table(1)
+      table.Name.should == "table3"
+    end
+
+    it "should access a table via its name" do
+      table = @sheet.table("table3")
+      table.Name.should == "table3"
+    end
+
+  end
+
   describe "creating" do
 
     context "with standard" do
@@ -105,44 +119,48 @@ describe ListObject do
 
   end
 
+  describe "accessing a listrow" do
+
+    before do
+      @table1 = @sheet.table(1)
+    end
+
+    it "should access a listrow given its number" do
+      @table1[2].values.should == [2.0, "Fred", nil, 0.5416666666666666, 40]
+    end
+
+    it "should access the listrow given a one-column key" do
+      @table1[{"Number" => 2}].values.should == [2.0, "Fred", nil, 0.5416666666666666, 40]
+    end
+
+    it "should access the first suitable listrow that matches a given one-column key" do      
+      @table1[{"Number" => 3}].values.should == [3.0, "John", 50.0, 0.5, 30]
+    end
+
+    it "should access a listrow via a multiple-column key" do
+      @table1[{"Number" => 3, "Person" => "Angel"}].values.should == [3.0, "Angel", 100, 0.6666666666666666, 60]
+    end
+
+    it "should yield nil if there is no match" do
+      @table1[{"Number" => 3, "Person" => "Ang"}].should be nil
+    end
+
+    it "should raise an error if the key contains no existing columns" do
+      expect{
+        @table1[{"Number" => 3, "Persona" => "Angel"}]
+        }.to raise_error(TableError)
+    end
+
+  end
+
   describe "getting and setting values" do
 
     context "with various column names" do
 
       context "with standard" do
 
-      before do
-        @table = Table.new(@sheet, "table_name", [1,1], 3, ["Person1","Amo%untSal___es"])
-        @table_row1 = @table[1]
-      end
-
-      it "should read and set values via alternative column names" do
-        @table_row1.person1.should be nil
-        @table_row1.person1 = "John"
-        @table_row1.person1.should == "John"
-        @sheet[2,1].Value.should == "John"
-        @table_row1.amount_sal_es.should be nil
-        @table_row1.amount_sal_es = 42
-        @table_row1.amount_sal_es.should == 42
-        @sheet[2,2].Value.should == 42
-        @table_row1.Person1 = "Herbert"
-        @table_row1.Person1.should == "Herbert"
-        @sheet[2,1].Value.should == "Herbert"
-        #@table_row1.AmountSales = 80
-        #@table_row1.AmountSalEs = 80
-        #@table_row1.AmountSalEs.should == 80
-        #@sheet[2,2].Value.should == 80
-      end
-
-=begin
         before do
-          @table = Table.new(@sheet, "table_name", [1,1], 3, ["Person1","Win/Sales", "xiq-Xs", "OrderID", YEAR"])
-          @table_row1 = @table[1]
-        end
-=end
-
-        before do
-          @table = Table.new(@sheet, "table_name", [1,1], 3, ["Person1", "Win/Sales", "xiq-Xs"])
+          @table = Table.new(@sheet, "table_name", [12,1], 3, ["Person1","Win/Sales", "xiq-Xs", "OrderID", "YEAR", "length in m", "Amo%untSal___es"])
           @table_row1 = @table[1]
         end
 
@@ -150,68 +168,48 @@ describe ListObject do
           @table_row1.person1.should be nil
           @table_row1.person1 = "John"
           @table_row1.person1.should == "John"
-          @sheet[2,1].Value.should == "John"
+          @sheet[13,1].Value.should == "John"
           @table_row1.Person1 = "Herbert"
           @table_row1.Person1.should == "Herbert"
-          @sheet[2,1].Value.should == "Herbert"
+          @sheet[13,1].Value.should == "Herbert"
           @table_row1.win_sales.should be nil
           @table_row1.win_sales = 42
           @table_row1.win_sales.should == 42
-          @sheet[2,2].Value.should == 42
+          @sheet[13,2].Value.should == 42
           @table_row1.Win_Sales = 80
           @table_row1.Win_Sales.should == 80
-          @sheet[2,2].Value.should == 80
+          @sheet[13,2].Value.should == 80
           @table_row1.xiq_xs.should == nil
           @table_row1.xiq_xs = 90
           @table_row1.xiq_xs.should == 90
-          @sheet[2,3].Value.should == 90
+          @sheet[13,3].Value.should == 90
           @table_row1.xiq_Xs = 100
           @table_row1.xiq_Xs.should == 100
-          @sheet[2,3].Value.should == 100
-          #@table_row1.order_id.should == nil
-          #@table_row1.order_id = 1
-          #@table_row1.order_id.should == 1
-          #@sheet[2,4].Value.should == 1
-          #@table_row1.Order_ID = 2
-          #@table_row1.Order_ID.should == 2
-          #@sheet[2,4].Value.should == 2
-          #@table_row1.year.should == 1984
-          #@table_row1.year = 1984
-          #@table_row1.year.should == 1984
-          #@sheet[2,5].Value.should == 1984
-          #@table_row1.YEAR = 2020
-          #@table_row1.YEAR.should == 2020
-          #@sheet[2,5].Value.should == 2020
-        end
-
-      end
-
-      context "with further column names" do
-
-        before do
-          @table = Table.new(@sheet, "table_name", [1,1], 3, ["OrderID", "YEAR", "length in meters"])
-          @table_row1 = @table[1]
-        end
-
-        it "should read and set values via alternative column names" do
+          @sheet[13,3].Value.should == 100
           @table_row1.order_id.should == nil
           @table_row1.order_id = 1
           @table_row1.order_id.should == 1
-          @sheet[2,1].Value.should == 1
+          @sheet[13,4].Value.should == 1
           @table_row1.OrderID = 2
           @table_row1.OrderID.should == 2
-          @sheet[2,1].Value.should == 2
-          @table_row1.year.should == nil
+          @sheet[13,4].Value.should == 2
           @table_row1.year = 1984
           @table_row1.year.should == 1984
-          @sheet[2,2].Value.should == 1984
+          @sheet[13,5].Value.should == 1984
           @table_row1.YEAR = 2020
           @table_row1.YEAR.should == 2020
-          @sheet[2,2].Value.should == 2020
-          @table_row1.length_in_meters.should == nil
-          @table_row1.length_in_meters = 20
-          @table_row1.length_in_meters.should == 20
-          @sheet[2,3].Value.should == 20
+          @sheet[13,5].Value.should == 2020
+          @table_row1.length_in_m.should == nil
+          @table_row1.length_in_m = 20
+          @table_row1.length_in_m.should == 20
+          @sheet[13,6].Value.should == 20
+          @table_row1.length_in_m = 40
+          @table_row1.length_in_m.should == 40
+          @sheet[13,6].Value.should == 40
+          @table_row1.amo_unt_sal___es.should == nil
+          @table_row1.amo_unt_sal___es = 80
+          @table_row1.amo_unt_sal___es.should == 80
+          @sheet[13,7].Value.should == 80
         end
 
       end
