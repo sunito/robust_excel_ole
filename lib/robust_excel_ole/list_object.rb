@@ -76,24 +76,29 @@ module RobustExcelOle
 
     # accesses a table row object
     # @param [Variant]  a hash of key (key column: value) or a row number (>= 1) 
-    # @param [Integer]  maximal number of matching list rows to return
-    # @return [Variant] a list row object of dynamically constructed class with class ListRow,
-    #                                     if one matching list row was found 
-    #                   an array of listrows, if several list rows were found
+    # @param [Variant]  maximal number of matching list rows to return
+    # @return [Variant] a list row object, if limit == :first
+    #                   an array of listrows, with maximal number=limit, if list rows were found and limit is not :first
     #                   nil, if no list object was found
-    def [] (keys_or_number, limit = 1)
+    # note: when applying the advanced filter (for long tables), then
+    #       if there are more than one match, then only the last match is being returned
+    def [] (keys_or_number, limit = :first)
       return @row_class.new(keys_or_number) if keys_or_number.respond_to?(:succ)
       keys = keys_or_number
-      if @ole_table.ListRows.Count < 40
-        find_listrow_via_rownumbers(keys, limit)
+      matching_listrows = if @ole_table.ListRows.Count < 40
+        listrows_via_traversing_listrows(keys, limit)
       else
-        find_listrow_via_advanced_filter(keys, limit)
+        listrows_via_advanced_filter(keys, limit)
+      end
+      if matching_listrows.count==0 then nil
+      elsif limit==:first then matching_listrows.first
+      else matching_listrows
       end
     end
 
   private
 
-    def find_listrow_via_rownumbers(keys, limit)
+    def listrows_via_traversing_listrows(keys, limit)
       begin      
         matching_listrows = []
         @ole_table.ListRows.each do |ole_listrow|
@@ -102,17 +107,13 @@ module RobustExcelOle
           end
           break if matching_listrows.count == limit
         end
-        case matching_listrows.count
-        when 0 then nil
-        when 1 then matching_listrows.first
-        else matching_listrows
-        end
+        matching_listrows
       rescue
         raise(TableError, "cannot find row with key #{keys}")
       end
     end
 
-    def find_listrow_via_advanced_filter(keys, limit)
+    def listrows_via_advanced_filter(keys, limit)
       begin      
         ole_worksheet = self.Parent
         ole_workbook =  ole_worksheet.Parent
@@ -124,13 +125,18 @@ module RobustExcelOle
           'Action' => XlFilterInPlace, 
           'CriteriaRange' => added_ole_worksheet.range([1..2,1..keys.length]).ole_range, 'Unique' => false})
         ole_workbook.Parent.with_displayalerts(false){added_ole_worksheet.Delete}
-        filtered_ole_range = ole_worksheet.UsedRange.Offset(position.first+1,0).SpecialCells(XlCellTypeVisible)
-        row_number = filtered_ole_range.Cells(1,1).Row - position.first
+        filtered_ole_range = self.DataBodyRange.SpecialCells(XlCellTypeVisible)
+        row_numbers = []
+        filtered_ole_range.Areas.each do |area|
+          break if area.Rows.each do |row|
+            row_numbers << row.Row-position.first if row.value != [[].fill(nil,1..(@ole_table.ListColumns.Count))] 
+            break true if row_numbers.count == limit
+          end
+        end
         ole_worksheet.ShowAllData
         @ole_table = ole_worksheet.table(self.Name)
-        listrow = self[row_number]
         ole_workbook.Saved = saved_status
-        listrow
+        row_numbers.map{|r| self[r]}        
       rescue
         raise(TableError, "cannot find row with keys #{keys}")
       end
