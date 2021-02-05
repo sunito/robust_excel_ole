@@ -1,35 +1,6 @@
 # -*- coding: utf-8 -*-
 require 'pathname'
 
-=begin
-class String
-
- def replace_umlauts
-    puts "replace_umlauts:"
-    word = self
-    puts "word: #{word}"
-    puts "word: #{word.inspect}"
-    word = self.force_encoding("UTF-8")
-    puts "self.force_encoding: #{self.force_encoding('utf-8')}"
-    puts "self.force_encoding.inspect: #{self.force_encoding('utf-8').inspect}"
-    word = self.force_encoding('iso-8859-1').encode('utf-8')
-    puts "self.force_encoding('iso-8859-1').encode('utf-8'): #{self.force_encoding('iso-8859-1').encode('utf-8')}"
-    puts "word.encoding: #{word.encoding}"
-    #word = self.encode("UTF-8")
-    #word = self.encode("UTF-8", "Windows-1252")    
-    word.gsub('ä','ae').gsub('Ä','Ae').gsub('ö','oe').gsub('Ö','Oe').gsub('ü','ue').gsub('Ü','Ue')
-    word.gsub('ß','ss').gsub('²','2').gsub('³','3')      
-    #word.gsub("\x84",'ae').gsub("\x8E",'Ae').gsub("\x94",'oe').gsub("\x99",'Oe').gsub("\x81",'ue').gsub("\x9A",'Ue')
-    #word.gsub("\xE1",'ss').gsub("\xFD",'2').gsub("\xFC",'3')
-    word
-  end
-
-end
-=end
-
-
-# @private
-#class WIN32OLE
 module ToReoRefinement
 
   refine WIN32OLE do
@@ -106,16 +77,33 @@ module StringRefinement
         end
       end
     end
+    
+=begin
+    def replace_umlauts
+      translation_table = {
+        'ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'Ä' => 'Ae', 'Ö' => 'Oe', 'Ü' => 'Ue',
+        'ß' => 'ss', '²' => '2', '³' => '3' 
+      }
+      translation_table.each { |umlaut,translation| self.gsub!(umlaut, translation) }
+      self
+    end
+=end
 
     def replace_umlauts
-      word = self.force_encoding("UTF-8")
-      #word = self.force_encoding('iso-8859-1').encode('utf-8')
-      #word = self.encode("UTF-8")
-      #word = self.encode("UTF-8", "Windows-1252")    
-      word.gsub('ä','ae').gsub('Ä','Ae').gsub('ö','oe').gsub('Ö','Oe').gsub('ü','ue').gsub('Ü','Ue')
-      word.gsub('ß','ss').gsub('²','2').gsub('³','3')      
-      #word.gsub("\x84",'ae').gsub("\x8E",'Ae').gsub("\x94",'oe').gsub("\x99",'Oe').gsub("\x81",'ue').gsub("\x9A",'Ue')
-      #word.gsub("\xE1",'ss').gsub("\xFD",'2').gsub("\xFC",'3')
+      word = self
+      if word.encoding != Encoding.find("UTF-8")
+        word = self.force_encoding('iso-8859-1').encode('utf-8')
+        translation_table = {
+          /[\u0084]/ => 'ae', /[\u0094]/ => 'oe', /\u0081/ => 'ue', /[\u008E]/ => 'Ae', /[\u0099]/ => 'Oe', /[\u009A]/ => 'Ue',
+          /[\u00E1]/ => 'ss', /[\u00FD]/ => '2', /[\u00FC]/ => '3' 
+        }        
+      else
+        translation_table = {
+          'ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'Ä' => 'Ae', 'Ö' => 'Oe', 'Ü' => 'Ue',
+          'ß' => 'ss', '²' => '2', '³' => '3' 
+        }
+      end
+      translation_table.each { |umlaut,translation| word.gsub!(umlaut, translation) }
       word
     end
 
