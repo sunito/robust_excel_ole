@@ -131,7 +131,7 @@ describe ListObject do
   describe "benchmarking for accessing a listrow" do
 
     it "should access the last row" do
-      rows = 27
+      rows =  10
       table = Table.new(@sheet.ole_worksheet, "table_name", [20,1], rows, ["Index","Person", "Time", "Price", "Sales", "Length", "Size", "Width", "Weight", "Income", "Outcome", "Holiday", "Gender", "Sex", "Tallness", "Kindness", "Music", "Activity", "Goal", "Need"])
       (1..rows).each do |row|
         table[row].values = [12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason"]
@@ -205,11 +205,13 @@ describe ListObject do
     end
 
     it "should access listrows containing umlauts" do
-      @table1[1].values = [1, "Sören", 20.0, 0.1, 40]
-      sleep 5
-      @table1[{"Number" => 1, "Person" => "Sören"}].values.encode_value.should == [1, "Sören", 20.0, 0.1, 40]
       #@table1[1].values = [1, "Sören", 20.0, 0.1, 40]
-      #@table1[{"Number" => 1, "Person" => "Sören"}].map{|l| l.values}.encode_values.should == [1, "Sören", 20.0, 0.1, 40]
+      #@table1[{"Number" => 1, "Person" => "Sören"}].values.encode_value.should == [1, "Sören", 20.0, 0.1, 40]
+      @table1.add_column("Straße", 3, ["ä","ö","ü","ß","²","³","g","h","i","j","k","l","m"])
+      @table1[1].values = [1, "Sören", "Lösung", 20.0, 0.1, 40]
+      @table1[1].values.should == [1, "Sören", "Lösung", 20.0, 0.1, 40]
+      @table1[{"Number" => 1, "Person" => "Sören"}].values.encode_value.should == [1, "Sören", "Lösung", 20.0, 0.1, 40]
+      @table1[{"Number" => 1, "Straße" => "Lösung"}].values.encode_value.should == [1, "Sören", "Lösung", 20.0, 0.1, 40]
     end
 
   end
@@ -431,7 +433,7 @@ describe ListObject do
 
     it "should sort the table according to first table" do
       @table.sort("Number")
-      @table.ListRows.Item(1).Range.Value.first.should == [1,"Werner",40,0.5, 80]
+      @table.ListRows.Item(1).Range.Value.first.should == [1, "Werner",40,0.5, 80]
       @table.ListRows.Item(2).Range.Value.first.should == [1, "Napoli", 20.0, 0.4166666666666667, 70.0]
       @table.ListRows.Item(3).Range.Value.first.should == [2, "Fred", nil, 0.5416666666666666, 40]     
       @table.ListRows.Item(4).Range.Value.first.should == [3, "John", 50.0, 0.5, 30]

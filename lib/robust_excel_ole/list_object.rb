@@ -99,7 +99,8 @@ module RobustExcelOle
       begin      
         matching_listrows = []
         @ole_table.ListRows.each do |ole_listrow|
-          if key_hash.map{|key,val| ole_listrow.Range.Value.first[column_names.index(key)]==val}.inject(true,:&)
+          def encode_utf8(val); val.respond_to?(:gsub) ? val.encode('utf-8') : val; end
+          if key_hash.map{|key,val| encode_utf8(ole_listrow.Range.Value.first[column_names.index(key)])==val}.inject(true,:&)
             matching_listrows << @row_class.new(ole_listrow) 
           end
           break if matching_listrows.count == limit
@@ -143,10 +144,21 @@ module RobustExcelOle
 
   public
 
+    # resets filter such that the original highlighting is visible
+    def reset_filter
+      ole_workbook = self.Parent.Parent
+      added_ole_worksheet = ole_workbook.Worksheets.Add
+      ole_workbook.retain_saved do
+        self.Range.AdvancedFilter({'Action' => XlFilterInPlace, 
+                                   'CriteriaRange' => added_ole_worksheet.range([1,1]).ole_range})
+        ole_workbook.Parent.with_displayalerts(false){added_ole_worksheet.Delete}
+      end      
+    end
+
     # @return [Array] a list of column names
     def column_names
       begin
-        @ole_table.HeaderRowRange.Value.first
+        @ole_table.HeaderRowRange.Value.first.map{|v| v.encode('utf-8')}
       rescue WIN32OLERuntimeError
         raise TableError, "could not determine column names"
       end
