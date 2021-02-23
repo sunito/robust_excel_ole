@@ -51,7 +51,7 @@ module RobustExcelOle
     def name
       @ole_worksheet.Name.encode('utf-8')
     rescue
-      raise WorksheetREOError, "name could not be determined"
+      raise WorksheetREOError, "name could not be determined\n#{$!.message}"
     end
 
     # sets sheet name
@@ -60,7 +60,7 @@ module RobustExcelOle
       @ole_worksheet.Name = new_name
     rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
       if msg.message =~ /800A03EC/ || msg.message =~ /Visual Basic/
-        raise NameAlreadyExists, "sheet name #{new_name.inspect} already exists"
+        raise NameAlreadyExists, "sheet name #{new_name.inspect} already exists\n#{$!.message}"
       else
         raise UnexpectedREOError, "unexpected WIN32OLERuntimeError: #{msg.message}"
       end
@@ -77,7 +77,7 @@ module RobustExcelOle
         begin
           @cells[xy] = RobustExcelOle::Cell.new(@ole_worksheet.Cells.Item(x, y), @worksheet)
         rescue
-          raise RangeNotEvaluatable, "cannot read cell (#{x.inspect},#{y.inspect})"
+          raise RangeNotEvaluatable, "cannot read cell (#{x.inspect},#{y.inspect})\n#{$!.message}"
         end
       else
         name = p1
@@ -117,12 +117,12 @@ module RobustExcelOle
     # @param  [Hash]        opts      the options
     # @option opts [Symbol] :default  the default value that is provided if no contents could be returned
     # @return [Variant] the contents of a range with given name
-    def namevalue(name, opts = { :default => :__not_provided })
+    def namevalue(name, opts = { default: :__not_provided })
       begin
         ole_range = self.Range(name)
       rescue # WIN32OLERuntimeError, VBAMethodMissingError, Java::OrgRacobCom::ComFailException 
         return opts[:default] unless opts[:default] == :__not_provided
-        raise NameNotFound, "name #{name.inspect} not in #{self.inspect}"
+        raise NameNotFound, "name #{name.inspect} not in #{self.inspect}\n#{$!.message}"
       end
       begin
         worksheet = self if self.is_a?(Worksheet)
@@ -135,11 +135,11 @@ module RobustExcelOle
         end
       rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException 
         return opts[:default] unless opts[:default] == :__not_provided
-        raise RangeNotEvaluatable, "cannot determine value of range named #{name.inspect} in #{self.inspect}"
+        raise RangeNotEvaluatable, "cannot determine value of range named #{name.inspect} in #{self.inspect}\n#{$!.message}"
       end
       if value == -2146828288 + RobustExcelOle::XlErrName
         return opts[:default] unless opts[:default] == __not_provided
-        raise RangeNotEvaluatable, "cannot evaluate range named #{name.inspect} in #{File.basename(workbook.stored_filename).inspect rescue nil}"
+        raise RangeNotEvaluatable, "cannot evaluate range named #{name.inspect} in #{File.basename(workbook.stored_filename).inspect rescue nil}\n#{$!.message}"
       end
       return opts[:default] unless (opts[:default] == :__not_provided) || value.nil?
       value
@@ -153,7 +153,7 @@ module RobustExcelOle
       begin
         ole_range = self.Range(name)
       rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException, VBAMethodMissingError
-        raise NameNotFound, "name #{name.inspect} not in #{self.inspect}"
+        raise NameNotFound, "name #{name.inspect} not in #{self.inspect}\n#{$!.message}"
       end
       begin
         ole_range.Interior.ColorIndex = opts[:color] unless opts[:color].nil?
@@ -164,13 +164,13 @@ module RobustExcelOle
           row, col = address_tool.as_integer_ranges(address_r1c1)
           row.each_with_index do |r,i|
             col.each_with_index do |c,j|
-              ole_range.Cells(i+1,j+1).Value = (value.respond_to?(:first) ? value[i][j] : value)
+              ole_range.Cells(i+1,j+1).Value = (value.respond_to?(:pop) ? value[i][j] : value)
             end
           end
         end
         value
       rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
-        raise RangeNotEvaluatable, "cannot assign value to range named #{name.inspect} in #{self.inspect}"
+        raise RangeNotEvaluatable, "cannot assign value to range named #{name.inspect} in #{self.inspect}\n#{$!.message}"
       end
     end
 
@@ -178,11 +178,9 @@ module RobustExcelOle
     # @params row and column
     # @returns value of the cell
     def cellval(x,y)
-      begin
-        @ole_worksheet.Cells.Item(x, y).Value
-      rescue
-        raise RangeNotEvaluatable, "cannot read cell (#{x.inspect},#{y.inspect})"
-      end
+      @ole_worksheet.Cells.Item(x, y).Value
+    rescue
+      raise RangeNotEvaluatable, "cannot read cell (#{x.inspect},#{y.inspect})\n#{$!.message}"
     end
 
     # sets the value of a cell, if row, column and color of the cell are given
@@ -193,7 +191,7 @@ module RobustExcelOle
       cell.Interior.ColorIndex = opts[:color] unless opts[:color].nil?
       cell.Value = value
     rescue # WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
-      raise RangeNotEvaluatable, "cannot assign value #{value.inspect} to cell (#{y.inspect},#{x.inspect})"
+      raise RangeNotEvaluatable, "cannot assign value #{value.inspect} to cell (#{y.inspect},#{x.inspect})\n#{$!.message}"
     end
 
     # provides a 2-dimensional array that contains the values in each row
@@ -302,7 +300,7 @@ module RobustExcelOle
             self.Names.Item('__dummy001').Delete
           rescue
             address2_string = address2.nil? ? "" : ", #{address2.inspect}"
-            raise RangeNotCreated, "cannot create range (#{name_or_address.inspect}#{address2_string})"
+            raise RangeNotCreated, "cannot create range (#{name_or_address.inspect}#{address2_string})\n#{$!.message}"
           end
         end
       end
@@ -312,12 +310,9 @@ module RobustExcelOle
     # @params [Variant] table (listobject) name or number 
     # @return [ListObject] a table (listobject)
     def table(number_or_name)
-      begin
-        ole_listobject = @ole_worksheet.ListObjects.Item(number_or_name)
-      rescue
-        raise WorksheetREOError, "table #{number_or_name} not found"
-      end
-      ListObject.new(ole_listobject)
+      listobject_class.new(@ole_worksheet.ListObjects.Item(number_or_name))
+    rescue
+      raise WorksheetREOError, "table #{number_or_name} not found\n#{$!.message}"
     end
 
     # @private
@@ -349,6 +344,21 @@ module RobustExcelOle
     end
 
     # @private
+    def self.listobject_class  
+      @listobject_class ||= begin
+        module_name = self.parent_name
+        "#{module_name}::ListObject".constantize        
+      rescue NameError => e
+        ListObject
+      end
+    end
+
+    # @private
+    def listobject_class        
+      self.class.listobject_class
+    end
+
+    # @private
     def to_s    
       '#<Worksheet: ' + (workbook.nil? ? 'not alive ' : (name + ' ' + File.basename(workbook.stored_filename)).to_s) + ">"
     end
@@ -363,22 +373,19 @@ module RobustExcelOle
   private
 
     def method_missing(name, *args)
-      if name.to_s[0,1] =~ /[A-Z]/
-        if ::ERRORMESSAGE_JRUBY_BUG 
-          begin
-            @ole_worksheet.send(name, *args)
-          rescue Java::OrgRacobCom::ComFailException 
-            raise VBAMethodMissingError, "unknown VBA property or method #{name.inspect}"
-          end
-        else
-          begin
-            @ole_worksheet.send(name, *args)
-          rescue NoMethodError 
-            raise VBAMethodMissingError, "unknown VBA property or method #{name.inspect}"
-          end
+      super unless name.to_s[0,1] =~ /[A-Z]/
+      if ::ERRORMESSAGE_JRUBY_BUG 
+        begin
+          @ole_worksheet.send(name, *args)
+        rescue Java::OrgRacobCom::ComFailException 
+          raise VBAMethodMissingError, "unknown VBA property or method #{name.inspect}"
         end
       else
-        super
+        begin
+          @ole_worksheet.send(name, *args)
+        rescue NoMethodError 
+          raise VBAMethodMissingError, "unknown VBA property or method #{name.inspect}"
+        end
       end
     end
 
