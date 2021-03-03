@@ -71,19 +71,13 @@ module RobustExcelOle
       end
     end
 
-    # returns flat array of the values of a given range
+    # returns values of a given range
     # @returns [Array] values of the range (as a nested array)    
     def value
       if !::RANGES_JRUBY_BUG
         self.Value
       else
-        values = []
-        rows.each do |r|
-          values_col = []
-          columns.each{ |c| values_col << worksheet.Cells(r,c).Value}
-          values << values_col
-        end
-        values
+        rows.map{|r| columns.map {|c| worksheet.Cells(r,c).Value} }
       end
     rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
       raise RangeNotEvaluatable, "cannot read value\n#{$!.message}"
@@ -106,8 +100,8 @@ module RobustExcelOle
       raise RangeNotEvaluatable, "cannot assign value to range #{self.inspect}\n#{$!.message}"
     end
 
-    alias_method :v, :value
-    alias_method :v=, :value=
+    alias v value
+    alias v= value=
 
     # sets the values if the range with a given color
     # @param [Variant] value
@@ -207,7 +201,7 @@ module RobustExcelOle
 
     # @private
     def to_s
-      "#<REO::Range: " + "#{@ole_range.Address('External': true).gsub(/\$/,'')} " + ">"
+      "#<REO::Range: " + "#{@ole_range.Address(External: true).gsub(/\$/,'')} " + ">"
     end
 
     # @private

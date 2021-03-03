@@ -76,7 +76,6 @@ module RobustExcelOle
     # accesses a table row object
     # @param [Variant]  a hash of key (key column: value) or a row number (>= 1) 
     # @option opts [Variant] limit: maximal number of matching table rows to return, or return the first matching table row (default :first)
-    # @option opts [Boolean]  reset_colors: reset to the original colors of the table rows, after applying advanced filter
     # @return [Variant] a listrow, if limit == :first
     #                   an array of listrows, with maximal number=limit, if list rows were found and limit is not :first
     #                   nil, if no list object was found
@@ -84,25 +83,25 @@ module RobustExcelOle
     #       if there are more than one match, then only the last match is being returned
     def [] (key_hash_or_number, opts = { })
       return @row_class.new(key_hash_or_number) if key_hash_or_number.respond_to?(:succ)
-      opts = {limit: :first, reset_colors: false}.merge(opts)   
+      opts = {limit: :first}.merge(opts)   
       key_hash = key_hash_or_number
-      matching_listrows = if @ole_table.ListRows.Count < 100
-        listrows_via_traversing_listrows(key_hash, opts)
+      matching_listrows = if @ole_table.ListRows.Count < 0 # < 150
+        listrows_via_traversing(key_hash, opts)
       else
-        listrows_via_advanced_filter(key_hash, opts)
+        listrows_via_filter(key_hash, opts)
       end
       opts[:limit] == :first ? matching_listrows.first : matching_listrows
     end
 
     private
 
-    def listrows_via_traversing_listrows(key_hash, opts)
+    def listrows_via_traversing(key_hash, opts)
       encode_utf8 = ->(val) {val.respond_to?(:gsub) ? val.encode('utf-8') : val}
-      cn = column_names_to_index
+      cn2i = column_names_to_index
       matching_rows = []
       @ole_table.ListRows.each do |listrow|
         rowvalues = listrow.Range.Value.first
-        matching_rows << @row_class.new(listrow) if key_hash.all?{|key,val| encode_utf8.call(rowvalues[cn[key]])==val}
+        matching_rows << @row_class.new(listrow) if key_hash.all?{|key,val| encode_utf8.(rowvalues[cn2i[key]])==val}
         break if matching_rows.count == opts[:limit]
       end
       matching_rows
@@ -110,7 +109,7 @@ module RobustExcelOle
       raise(TableError, "cannot find row with key #{key_hash}")
     end
 
-    def listrows_via_advanced_filter(key_hash, opts)
+    def listrows_via_filter(key_hash, opts)
       ole_worksheet = self.Parent
       ole_workbook =  ole_worksheet.Parent
       row_numbers = []
@@ -119,15 +118,12 @@ module RobustExcelOle
         criteria = Table.new(added_ole_worksheet, "criteria", [2,1], 2, key_hash.keys)
         criteria[1].values = key_hash.values
         self.Range.AdvancedFilter({
-          'Action': XlFilterInPlace, 
-          'CriteriaRange': added_ole_worksheet.range([2..3,1..key_hash.length]).ole_range, 'Unique': false})
-        filtered_ole_range = self.DataBodyRange.SpecialCells(XlCellTypeVisible) rescue nil 
-        if opts[:reset_colors]
-          self.Range.AdvancedFilter({'Action': XlFilterInPlace, 
-                                     'CriteriaRange': added_ole_worksheet.range([1,1]).ole_range})          
-        else
-          ole_worksheet.ShowAllData
-        end
+          Action: XlFilterInPlace, 
+          CriteriaRange: added_ole_worksheet.range([2..3,1..key_hash.length]).ole_range, Unique: false})
+        filtered_ole_range = self.DataBodyRange.SpecialCells(XlCellTypeVisible) rescue nil         
+        ole_worksheet.ShowAllData        
+        self.Range.AdvancedFilter({Action: XlFilterInPlace, 
+                                   CriteriaRange: added_ole_worksheet.range([1,1]).ole_range, Unique: false})          
         ole_workbook.Parent.with_displayalerts(false){added_ole_worksheet.Delete}
         if filtered_ole_range
           filtered_ole_range.Areas.each do |area|
@@ -144,21 +140,7 @@ module RobustExcelOle
       raise(TableError, "cannot find row with key #{key_hash}\n#{$!.message}")
     end
 
-  public
-
-    # clear filter such that the original colors of the table are being visible 
-    def reset_colors
-      ole_workbook = self.Parent.Parent
-      ole_workbook.retain_saved do
-        added_ole_worksheet = ole_workbook.Worksheets.Add
-        begin
-          self.Range.AdvancedFilter({'Action': XlFilterInPlace, 
-                                     'CriteriaRange': added_ole_worksheet.range([1,1]).ole_range})
-        ensure
-          ole_workbook.Parent.with_displayalerts(false){added_ole_worksheet.Delete}
-        end
-      end      
-    end
+  public    
     
     # @return [Array] a list of column names
     def column_names
@@ -245,7 +227,7 @@ module RobustExcelOle
     # @param [Integer] row number
     # @return [Array] contents of a row
     def row_values(row_number)
-      @ole_table.ListRows.Item(row_number).Range.Value.first
+      @ole_table.ListRows.Item(row_number).Range.Value.first.map{|v| v.respond_to?(:gsub) ? v.encode('utf-8') : v}
     rescue WIN32OLERuntimeError
       raise TableError, "could not read the values of row #{row_number.inspect}\n#{$!.message}"
     end
@@ -264,7 +246,7 @@ module RobustExcelOle
 
     # @return [Array] contents of a column
     def column_values(column_number_or_name)
-      @ole_table.ListColumns.Item(column_number_or_name).Range.Value[1,@ole_table.ListRows.Count].flatten
+      @ole_table.ListColumns.Item(column_number_or_name).Range.Value[1,@ole_table.ListRows.Count].flatten.map{|v| v.respond_to?(:gsub) ? v.encode('utf-8') : v}
     rescue WIN32OLERuntimeError
       raise TableError, "could not read the values of column #{column_number_or_name.inspect}\n#{$!.message}"
     end
@@ -318,14 +300,14 @@ module RobustExcelOle
     def find_cells(value)
       listrows = @ole_table.ListRows      
       result = []
-      (1..listrows.Count).each do |row_number|
-        row_values(row_number).find_all_indices(value).each do |col_number|
-          result << @ole_table.Application.Intersect(listrows.Item(row_number).Range, 
-                                                     @ole_table.ListColumns.Item(col_number+1).Range).to_reo
+      listrows.each do |listrow|
+        listrow.Range.Value.first.map{|v| v.respond_to?(:gsub) ? v.encode('utf-8') : v}.find_all_indices(value).each do |col_number|
+          result << @ole_table.Application.Intersect(listrow.Range, @ole_table.ListColumns.Item(col_number+1).Range).to_reo
         end
       end
       result
     end
+    
 
     # sorts the rows of the list object according to the given column
     # @param [Variant] column number or name

@@ -131,7 +131,7 @@ describe ListObject do
   describe "benchmarking for accessing a listrow" do
 
     it "should access the last row" do
-      rows =  10
+      rows =  150
       table = Table.new(@sheet.ole_worksheet, "table_name", [20,1], rows, ["Index","Person", "Time", "Price", "Sales", "Length", "Size", "Width", "Weight", "Income", "Outcome", "Holiday", "Gender", "Sex", "Tallness", "Kindness", "Music", "Activity", "Goal", "Need"])
       (1..rows).each do |row|
         table[row].values = [12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason"]
@@ -139,7 +139,7 @@ describe ListObject do
       table[rows].values = [12345123, "Peterson", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason", 12345678, "Johnason"]
       sleep 1
       start_time = Time.now
-      listrow = table[{"Index" => 12345123, "Person" => "Peterson"}, reset_colors: false]
+      listrow = table[{"Index" => 12345123, "Person" => "Peterson"}]
       end_time = Time.now
       duration = end_time - start_time
       puts "duration: #{duration}"
@@ -408,17 +408,42 @@ describe ListObject do
 
   describe "find all cells of a given value" do
 
-    before do
-      ole_table = @sheet.ListObjects.Item(1)
-      @table = Table.new(ole_table)
+    context "with standard" do
+
+      before do
+        ole_table = @sheet.ListObjects.Item(1)
+        @table = Table.new(ole_table)
+      end
+
+      it "should find all cells" do
+        cells = @table.find_cells(40)
+        cells[0].Row.should == 5
+        cells[0].Column.should == 8
+        cells[1].Row.should == 9
+        cells[1].Column.should == 6
+      end
+
     end
 
-    it "should find all cells" do
-      cells = @table.find_cells(40)
-      cells[0].Row.should == 5
-      cells[0].Column.should == 8
-      cells[1].Row.should == 9
-      cells[1].Column.should == 6
+    context "with umlauts" do
+
+      before do
+        @table = Table.new(@sheet, "lösung", [1,1], 3, ["Verkäufer","Straße"])
+        @table[1].values = ["sören", "stück"]
+        @table[2].values = ["stück", "glück"]
+        @table[3].values = ["soße",  "stück"]
+      end
+
+      it "should find all cells" do
+        cells = @table.find_cells("stück")
+        cells[0].Row.should == 2
+        cells[0].Column.should == 2
+        cells[1].Row.should == 3
+        cells[1].Column.should == 1
+        cells[2].Row.should == 4
+        cells[2].Column.should == 2
+      end
+
     end
   
   end

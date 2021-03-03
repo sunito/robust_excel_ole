@@ -99,12 +99,10 @@ module RobustExcelOle
     def self.puts_hash(hash)
       hash.each do |e|
         if e[1].is_a?(Hash)
-          puts "#{e[0]} =>"
-          e[1].each do |f|
-            puts "  #{f[0]} => #{f[1]}"
-          end
+          puts "#{e[0]}: "
+          e[1].each{ |f| puts "  #{f[0]}: #{f[1]}" }
         else
-          puts "#{e[0]} => #{e[1]}"
+          puts "#{e[0]}: #{e[1]}"
         end
       end
     end

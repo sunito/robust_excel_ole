@@ -129,7 +129,7 @@ module RobustExcelOle
       raise RangeNotEvaluatable, "cannot add name #{name.inspect} to range #{addr.inspect}\n#{$!.message}"
     end
 
-    alias_method :set_name, :add_name  # :deprecated :#
+    alias set_name add_name  # :deprecated :#
 
     # renames a range
     # @param [String] name     the previous range name
@@ -137,6 +137,8 @@ module RobustExcelOle
     def rename_range(name, new_name)
       item = name_object(name)
       item.Name = new_name
+    rescue RobustExcelOle::NameNotFound
+      raise
     rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException => msg
       raise UnexpectedREOError, "name error with name #{name.inspect} in #{File.basename(self.stored_filename).inspect}\n#{$!.message}"
     end
