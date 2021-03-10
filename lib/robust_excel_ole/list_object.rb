@@ -79,13 +79,11 @@ module RobustExcelOle
     # @return [Variant] a listrow, if limit == :first
     #                   an array of listrows, with maximal number=limit, if list rows were found and limit is not :first
     #                   nil, if no list object was found
-    # note: when applying the advanced filter (for long tables), then
-    #       if there are more than one match, then only the last match is being returned
     def [] (key_hash_or_number, opts = { })
       return @row_class.new(key_hash_or_number) if key_hash_or_number.respond_to?(:succ)
       opts = {limit: :first}.merge(opts)   
       key_hash = key_hash_or_number
-      matching_listrows = if @ole_table.ListRows.Count < 0 # < 150
+      matching_listrows = if @ole_table.ListRows.Count < 150
         listrows_via_traversing(key_hash, opts)
       else
         listrows_via_filter(key_hash, opts)
@@ -93,7 +91,7 @@ module RobustExcelOle
       opts[:limit] == :first ? matching_listrows.first : matching_listrows
     end
 
-    private
+  private
 
     def listrows_via_traversing(key_hash, opts)
       encode_utf8 = ->(val) {val.respond_to?(:gsub) ? val.encode('utf-8') : val}
@@ -298,16 +296,15 @@ module RobustExcelOle
     # @param[Variant] value to find
     # @return [Array] win32ole cells containing the given value
     def find_cells(value)
-      listrows = @ole_table.ListRows      
-      result = []
-      listrows.each do |listrow|
-        listrow.Range.Value.first.map{|v| v.respond_to?(:gsub) ? v.encode('utf-8') : v}.find_all_indices(value).each do |col_number|
-          result << @ole_table.Application.Intersect(listrow.Range, @ole_table.ListColumns.Item(col_number+1).Range).to_reo
+      encode_utf8 = ->(val) {val.respond_to?(:gsub) ? val.encode('utf-8') : val}   
+      listrows = @ole_table.ListRows   
+      listrows.map { |listrow|
+        listrow_range = listrow.Range
+        listrow_range.Value.first.map{ |v| encode_utf8.(v) }.find_all_indices(value).map do |col_number| 
+          listrow_range.Cells(1,col_number+1).to_reo 
         end
-      end
-      result
+      }.flatten
     end
-    
 
     # sorts the rows of the list object according to the given column
     # @param [Variant] column number or name
@@ -344,9 +341,9 @@ module RobustExcelOle
 
     # @private
     def inspect    
-      "#<ListObject:" + "#{@ole_table.Name}" + 
+      "#<ListObject:#{@ole_table.Name}" + 
       " #{@ole_table.ListRows.Count}x#{@ole_table.ListColumns.Count}" +
-      " #{@ole_table.Parent.Name}" + " #{@ole_table.Parent.Parent.Name}" + ">"
+      " #{@ole_table.Parent.Name} #{@ole_table.Parent.Parent.Name}>"
     end
 
     include MethodHelpers

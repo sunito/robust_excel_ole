@@ -57,6 +57,10 @@ module FindAllIndicesRefinement
 
 end
 
+TRANSLATION_TABLE = {
+      'ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'Ä' => 'Ae', 'Ö' => 'Oe', 'Ü' => 'Ue',
+      'ß' => 'ss', '²' => '2', '³' => '3'
+    }
 
 # @private
 module StringRefinement
@@ -72,26 +76,12 @@ module StringRefinement
       rescue TypeError
         raise TypeError, "Only strings can be parts of paths (given: #{path_part.inspect} of class #{path_part.class})"
       end
-    end
-
-=begin
-    TRANSLATION_TABLE = {
-      'ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'Ä' => 'Ae', 'Ö' => 'Oe', 'Ü' => 'Ue',
-      'ß' => 'ss', '²' => '2', '³' => '3'
-    }
+    end    
 
     def replace_umlauts
-      TRANSLATION_TABLE.inject(encode('utf-8')) { |word,transl| word.gsub(transl.first, transl.last) }
+      TRANSLATION_TABLE.inject(encode('utf-8')) { |word,(umlaut, replacement)| word.gsub(umlaut, replacement) }
     end
-=end    
 
-    def replace_umlauts
-      translation_table = {
-      'ä' => 'ae', 'ö' => 'oe', 'ü' => 'ue', 'Ä' => 'Ae', 'Ö' => 'Oe', 'Ü' => 'Ue',
-      'ß' => 'ss', '²' => '2', '³' => '3'
-      }
-      translation_table.inject(encode('utf-8')) { |word,transl| word.gsub(transl.first, transl.last) }
-    end
 
     # taken from http://apidock.com/rails/ActiveSupport/Inflector/underscore
     def underscore
@@ -209,12 +199,8 @@ module General
     def self.get_all_drives
       network = WIN32OLE.new('WScript.Network')
       drives = network.enumnetworkdrives
-      ndrives = []
       count = drives.Count
-      (0..(count - 1)).step(2) do |i|
-        ndrives << NetworkDrive.new( drives.Item(i), drives.Item(i + 1).tr('\\','/'))
-      end
-      ndrives
+      (0..(count - 1)).step(2).map{ |i| NetworkDrive.new( drives.Item(i), drives.Item(i + 1).tr('\\','/')) }
     end
   end
 
