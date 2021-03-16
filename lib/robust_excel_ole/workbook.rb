@@ -11,6 +11,8 @@ module RobustExcelOle
 
   class Workbook < RangeOwners
 
+    include Enumerable
+
     attr_reader :ole_workbook
     attr_reader :excel
     attr_reader :stored_filename
@@ -281,7 +283,7 @@ module RobustExcelOle
 
     # connects to an unknown workbook
     def connect(filename, options)   
-      workbooks_number = excel_class.excels_number==0 ? 0 : excel_class.current.Workbooks.Count
+      workbooks_number = excel_class.instance_count==0 ? 0 : excel_class.current.Workbooks.Count
       @ole_workbook = begin
         WIN32OLE.connect(General.absolute_path(filename))
       rescue
@@ -699,8 +701,8 @@ module RobustExcelOle
       raise(FileNotFound, "file #{General.absolute_path(file).inspect} is a directory") if File.directory?(file)
       self.class.process_options(options)
       begin  
-        save_as_manage_if_exists(file, options)
-        save_as_manage_if_blocked(file, options)
+        saveas_manage_if_exists(file, options)
+        saveas_manage_if_blocked(file, options)
         save_as_workbook(file, options)
       rescue AlreadyManaged
         nil
@@ -710,13 +712,13 @@ module RobustExcelOle
 
   private
 
-    def save_as_manage_if_exists(file, options)
+    def saveas_manage_if_exists(file, options)
       return unless File.exist?(file)
       case options[:if_exists]
       when :overwrite
         if file == self.filename
           save
-          raise AlreadyManaged, "already_managed"
+          raise AlreadyManaged
         else
           begin
             File.delete(file)
@@ -726,7 +728,7 @@ module RobustExcelOle
         end
       when :alert, :excel
         @excel.with_displayalerts(true){ save_as_workbook(file, options) }
-        raise AlreadyManaged, "already_managed"
+        raise AlreadyManaged
       when :raise
         raise FileAlreadyExists, "file already exists: #{File.basename(file).inspect}" +
         "\nHint: Use option if_exists: :overwrite, if you want to overwrite the file" 
@@ -736,7 +738,7 @@ module RobustExcelOle
       end
     end
 
-    def save_as_manage_if_blocked(file, options)
+    def saveas_manage_if_blocked(file, options)
       other_workbook = @excel.Workbooks.Item(File.basename(file)) rescue nil
       return unless other_workbook && self.filename != other_workbook.Fullname.tr('\\','/')
       case options[:if_obstructed]
@@ -830,14 +832,18 @@ module RobustExcelOle
     end
 
     def each
-      @ole_workbook.Worksheets.each do |sheet|
-        yield worksheet_class.new(sheet)
+      if block_given?
+        @ole_workbook.Worksheets.lazy.each do |sheet|
+          yield worksheet_class.new(sheet)
+        end
+      else
+        to_enum(:each).lazy
       end
     end
 
     def each_with_index(offset = 0)
       i = offset
-      @ole_workbook.Worksheets.each do |sheet|
+      @ole_workbook.Worksheets.lazy.each do |sheet|
         yield worksheet_class.new(sheet), i
         i += 1
       end
@@ -1056,7 +1062,8 @@ module RobustExcelOle
 
     # @private
     def inspect    
-      "#<Workbook: #{("not alive " unless alive?)} #{(File.basename(self.filename) if alive?)} #{@excel}>"
+      #{}"#<Workbook: #{("not alive " unless alive?)} #{(File.basename(self.filename) if alive?)} #{@excel}>"
+      "#<Workbook: #{(alive? ? File.basename(self.filename) : "not alive")} #{@excel}>"
     end
 
     using ParentRefinement

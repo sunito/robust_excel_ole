@@ -111,7 +111,7 @@ describe Workbook do
           book.should be_alive
           book.should be_a Workbook
           book.excel.ole_excel.Hwnd.should == @ole_wb.Application.Hwnd
-          Excel.excels_number.should == 1
+          Excel.instance_count.should == 1
         end
       end
     end
@@ -1391,7 +1391,32 @@ describe Workbook do
     end
   end
 
+  describe "each" do
+
+     before do
+      @book = Workbook.open(@simple_file)
+    end
+
+    it "should do each" do
+      @book.each do |sheet|
+        sheet.should be_kind_of Worksheet
+      end
+    end
+
+    it "should map" do
+      @book.map{|s| s}.should == [@book.sheet(1), @book.sheet(2), @book.sheet(3)]
+    end
+
+    it "should concatenate" do
+      names = ""
+      @book.each.with_index{|s,i| names << "#{s.name} #{i} " }
+      names.should == "Sheet1 0 Sheet2 1 Sheet3 2 "
+    end
+
+  end
+
   describe 'access sheet' do
+
     before do
       @book = Workbook.open(@simple_file)
     end

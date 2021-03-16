@@ -32,8 +32,12 @@ module RobustExcelOle
     end
 
     def each
-      @ole_range.each_with_index do |ole_cell, index|
-        yield cell(index){ole_cell}
+      if block_given?
+        @ole_range.lazy.each_with_index do |ole_cell, index|
+          yield cell(index){ole_cell}
+        end
+      else
+        to_enum(:each).lazy
       end
     end
 
