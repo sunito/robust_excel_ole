@@ -24,7 +24,7 @@ describe Worksheet do
     @blank_file = @dir + '/book_with_blank.xls'
     @merge_file = @dir + '/merge_cells.xls'
     @listobject_file = @dir + '/workbook_listobjects.xlsx'    
-    @book = Workbook.open(@simple_file)
+    @book = Workbook.open(@simple_file, v: true)
     @sheet = @book.sheet(1)
   end
 
@@ -151,6 +151,101 @@ describe Worksheet do
 
   end
 
+  describe "#[]" do
+
+    it "should access a rectangular range [1..2,1..3]" do
+      range1 = @sheet[1..2,1..3]
+      range1.should be_kind_of RobustExcelOle::Range
+      range1.Address.should == "$A$1:$C$2"
+      range1.Value.should == [["foo", "workbook", "sheet1"], ["foo", nil, "foobaaa"]]
+      range2 = @sheet[1..2, "A".."C"]
+      range2.Address.should == range1.Address
+      range3 = @sheet["A1:C2"]
+      range3.Address.should == range1.Address
+      range4 = @sheet["Z1S1:Z2S3"]
+      range4.Address.should == range1.Address
+    end
+
+    it "should access a range [1,1..3]" do
+      range1 = @sheet[1,1..3]
+      range1.should be_kind_of RobustExcelOle::Range
+      range1.Address.should == "$A$1:$C$1"
+      range1.Value.should == [["foo", "workbook", "sheet1"]]
+    end
+
+    it "should access a range [1..2,1]" do
+      range1 = @sheet[1..2,1]
+      range1.should be_kind_of RobustExcelOle::Range
+      range1.Address.should == "$A$1:$A$2"
+      range1.Value.should == [["foo"], ["foo"]]
+    end
+
+    it "should access a row 1" do
+      range1 = @sheet[1]
+      range1.should be_kind_of RobustExcelOle::Range
+      range1.Address.should == "$A$1:$C$1"
+      range1.Value.should == [["foo", "workbook", "sheet1"]]
+    end
+
+    it "should access a cell [1,2]" do
+      cell1 = @sheet[1,2]
+      cell1.should be_kind_of Cell
+      cell1.Address.should == "$B$1"
+      cell1.Value.should == "workbook"
+      cell2 = @sheet["B1"]
+      cell1.should be_kind_of Cell
+      cell2.Address.should == cell1.Address
+      cell3 = @sheet["Z1S2"]
+      cell1.should be_kind_of Cell
+      cell3.Address.should == cell1.Address
+    end
+
+    it "should a range with relative r1c1-reference" do
+      @sheet[1,1].Select
+      @sheet["Z1S[3]:Z[2]S8"].Address.should == "$D$1:$H$3"
+      @sheet["Z1S3:Z2S8"].Address.should == "$C$1:$H$2"
+    end
+
+    it "should a range with relative integer-range-reference" do
+      @sheet[1,1].Select
+      @sheet[1..[2],[3]..8].Address.should == "$D$1:$H$3"
+    end
+
+    it "should create infinite ranges" do
+      @sheet[1..3,nil].Address.should == "$1:$3"
+      @sheet[nil,"B".."D"].Address.should == "$B:$D"
+      @sheet["1:3"].Address.should == "$1:$3"
+      @sheet["B:D"].Address.should == "$B:$D"
+    end
+
+    it "should raise an error" do
+      expect{
+        @sheet[0,0]
+      }.to raise_error(RangeNotCreated, /cannot create/)
+      expect{
+        @sheet[0..3,4]
+      }.to raise_error(RangeNotCreated, /cannot create/)
+    end
+
+    it "should return value of a defined name" do
+      @book2 = Workbook.open(@dir + '/another_workbook.xls')
+      @sheet2 = @book2.sheet(1)
+      range1 = @sheet2["firstcell"]
+      range1.should be_kind_of Cell
+      range1.Value.should == "foo"
+      @sheet2["new"].Value.should == "foo"         
+      @sheet2["one"].Value.should == 1.0    
+      @sheet2["four"].Value.should == [[1,2],[3,4]]
+      @sheet2["firstrow"].Value.should == [[1,2]]
+      @sheet2["another"].Value.should == nil
+      expect {
+        @sheet2["foo"]
+      }.to raise_error(RangeNotCreated)  
+      @book2.close(:if_unsaved => :forget)
+    end
+
+  end
+
   describe 'access cell' do
 
     describe "#[,]" do      
@@ -168,13 +263,6 @@ describe Worksheet do
           @sheet[3, 1].Value.should eq 'matz'
         end
       end
-
-     # context "supplying nil as parameter" do
-     #   it "should access [1,1]" do
-     #     @sheet[1, nil].Value.should eq 'foo'
-     #     @sheet[nil, 1].Value.should eq 'foo'
-     #   end
-     # end
 
     end
 
@@ -301,10 +389,10 @@ describe Worksheet do
 
     end
 
-    describe '#each' do
+    describe '#each_cell' do
 
       it "should sort line in order of column" do
-        @sheet.each_with_index do |cell, i|
+        @sheet.each_cell_with_index do |cell, i|
           case i
           when 0
             cell.Value.should eq 'foo'
@@ -326,7 +414,7 @@ describe Worksheet do
         include_context "sheet 'open book with blank'"
 
         it 'should get from ["A1"]' do
-          @sheet_with_blank.each_with_index do |cell, i|
+          @sheet_with_blank.each_cell_with_index do |cell, i|
             case i
             when 5
               cell.Value.should be_nil
@@ -345,7 +433,7 @@ describe Worksheet do
 
       it "should access each cell" do
         cells = []
-        @sheet.each do |cell|
+        @sheet.each_cell do |cell|
           cells << cell
         end
         cells.should == [@sheet[1,1], @sheet[1,2], @sheet[1,3],
@@ -353,28 +441,41 @@ describe Worksheet do
                          @sheet[3,1], @sheet[3,2], @sheet[3,3]]
       end
 
-      it "should map" do
-        @sheet.map{|c| c}.should == [@sheet[1,1], @sheet[1,2], @sheet[1,3],
-                                     @sheet[2,1], @sheet[2,2], @sheet[2,3],
-                                     @sheet[3,1], @sheet[3,2], @sheet[3,3]]
-      end
-
-      it "should concatenate" do
-        values = []
-        @sheet.each.with_index{|c,i| values << [c.v, i]}
-        values.should == [["foo", 0], ["workbook", 1], ["sheet1", 2],
-                          ["foo", 3], [nil, 4], ["foobaaa", 5],
-                          ["matz", 6], ["is", 7], ["nice", 8]]
-      end
-
-
-
     end
 
     describe "#values" do
 
       it "should yield cell values of the used range" do
         @sheet.values.should == [["foo", "workbook", "sheet1"], ["foo", nil, "foobaaa"], ["matz", "is", "nice"]]
+      end
+
+    end
+
+    describe "#names" do
+
+      before do
+        @book1 = Workbook.open(@dir + '/another_workbook.xls')
+        @sheet1 = @book1.sheet(1)
+      end
+
+      it "should yield defined names" do
+        @sheet1.names.should == ["Sheet1!another_formula", "Sheet1!firstcell", "Sheet1!localname", "Sheet1!simple"]
+      end
+      
+    end
+
+    describe "#each" do
+
+      it "should yield rows" do
+        @sheet.each.with_index do |row, i|
+          row.value.should == [["foo", "workbook", "sheet1"]] if i == 0
+          row.value.should == [["foo", nil, "foobaaa"]] if i == 1
+          row.value.should == [["matz", "is", "nice"]] if i == 2
+        end
+      end
+
+      it "should do map" do
+        @sheet.map{|r| r.values}.should == [["foo", "workbook", "sheet1"], ["foo", nil, "foobaaa"], ["matz", "is", "nice"]]
       end
 
     end
@@ -629,6 +730,7 @@ describe Worksheet do
     end
 
     describe "[], []=" do
+
       before do
         @book1 = Workbook.open(@dir + '/another_workbook.xls')
         @sheet1 = @book1.sheet(1)
