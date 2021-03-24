@@ -94,8 +94,8 @@ module RobustExcelOle
     def [] (key_hash_or_number, opts = { })
       return @row_class.new(key_hash_or_number) if key_hash_or_number.respond_to?(:succ)
       opts = {limit: :first}.merge(opts)   
-      key_hash = key_hash_or_number
-      matching_listrows = if @ole_table.ListRows.Count < 150
+      key_hash = key_hash_or_number.transform_keys{|k| k.downcase.to_sym}
+      matching_listrows = if @ole_table.ListRows.Count <0 #< 120
         listrows_via_traversing(key_hash, opts)
       else
         listrows_via_filter(key_hash, opts)
@@ -105,12 +105,12 @@ module RobustExcelOle
 
   private
 
-    def listrows_via_traversing(key_hash, opts)
+    def listrows_via_traversing(key_hash, opts)      
       encode_utf8 = ->(val) {val.respond_to?(:gsub) ? val.encode('utf-8') : val}
       cn2i = column_names_to_index
       matching_rows = @ole_table.ListRows.select do |listrow| 
         rowvalues = listrow.Range.Value.first
-        key_hash.all?{ |key,val| encode_utf8.(rowvalues[cn2i[key]])==val }
+        key_hash.all?{ |key,val| encode_utf8.(rowvalues[cn2i[key]])==val}
       end
       opts[:limit] ? matching_rows.take(opts[:limit] == :first ? 1 : opts[:limit]) : matching_rows
     rescue
@@ -123,7 +123,7 @@ module RobustExcelOle
       row_numbers = []
       ole_workbook.retain_saved do
         added_ole_worksheet = ole_workbook.Worksheets.Add
-        criteria = Table.new(added_ole_worksheet, "criteria", [2,1], 2, key_hash.keys)
+        criteria = Table.new(added_ole_worksheet, "criteria", [2,1], 2, key_hash.keys.map{|s| s.to_s})
         criteria[1].values = key_hash.values
         self.Range.AdvancedFilter({
           Action: XlFilterInPlace, 
@@ -145,7 +145,7 @@ module RobustExcelOle
       end
       row_numbers.map{|r| self[r]}        
     rescue
-      raise(TableError, "cannot find row with key #{key_hash}\n#{$!.message}")
+      raise(TableError, "cannot find row with key #{key_hash}")
     end
 
   public    
@@ -158,12 +158,21 @@ module RobustExcelOle
     end
 
     # @return [Hash] pairs of column names and index
+=begin    
     def column_names_to_index
       header_row_values = @ole_table.HeaderRowRange.Value.first
       header_row_values.map{|v| v.encode('utf-8')}.zip(0..header_row_values.size-1).to_h
     rescue WIN32OLERuntimeError
       raise TableError, "could not determine column names\n#{$!.message}"
     end
+=end
+    def column_names_to_index
+      header_row_values = @ole_table.HeaderRowRange.Value.first
+      header_row_values.map{|v| v.encode('utf-8').downcase.to_sym}.zip(0..header_row_values.size-1).to_h
+    rescue WIN32OLERuntimeError
+      raise TableError, "could not determine column names\n#{$!.message}"
+    end
+
 
     # adds a row
     # @param [Integer] position of the new row
