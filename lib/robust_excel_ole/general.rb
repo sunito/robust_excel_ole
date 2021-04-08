@@ -7,26 +7,64 @@ module ToReoRefinement
 
     # type-lifting WIN32OLE objects to RobustExcelOle objects
     def to_reo
-      General.class2method.each do |classname, recognising_method|
-        begin
-          self.send(recognising_method)
-          if classname != RobustExcelOle::Range
-            return classname.new(self)
-          elsif self.Rows.Count == 1 && self.Columns.Count == 1
-            return Cell.new(self, self.Parent)
-          else
-            return RobustExcelOle::Range.new(self, self.Parent)
+      General.main_classes_ole_types_and_recognising_methods.each do |classname, ole_type, methods|
+        if !::OLETYPE_JRUBY_BUG
+          if self.ole_type.name == ole_type
+            if classname != RobustExcelOle::Range
+              return classname.new(self)
+            elsif self.Rows.Count == 1 && self.Columns.Count == 1
+              return RobustExcelOle::Cell.new(self, self.Parent)
+            else
+              return RobustExcelOle::Range.new(self, self.Parent)
+            end
           end
-        rescue
-          next
+        else
+          begin
+            recognising_method, no_method = methods
+            self.send(recognising_method)
+            unless no_method.nil?
+              begin
+                self.send(no_method[:no_method])
+                next
+              rescue NoMethodError
+                return classname.new(self)
+              end
+            end
+            if classname != RobustExcelOle::Range
+              return classname.new(self)
+            elsif self.Rows.Count == 1 && self.Columns.Count == 1
+              return RobustExcelOle::Cell.new(self, self.Parent)
+            else
+              return RobustExcelOle::Range.new(self, self.Parent)
+            end
+          rescue Java::OrgRacobCom::ComFailException => msg # NoMethodError
+            #if $!.message =~ /undefined method/ && 
+            #  main_classes_ole_types_and_recognising_methods.any?{ |_c, _o, recognising_method| $!.message.include?(recognising_method.to_s) }
+              next
+            #end 
+          end
         end
       end
       raise TypeREOError, "given object cannot be type-lifted to a RobustExcelOle object"
     end
 
   end
-
 end
+
+=begin
+ # working for ruby
+ def to_reo
+  case ole_type.name
+    when 'Range' then RobustExcelOle::Range.new(self)
+    when '_Worksheet' then RobustExcelOle::Worksheet.new(self)
+    when '_Workbook' then RobustExcelOle::Workbook.new(self)
+    when '_Application' then RobustExcelOle::Excel.new(self)
+    else
+      self
+    end
+  end
+end
+=end
 
 # @private
 class WIN32OLE
@@ -192,6 +230,7 @@ module General
   ::ERRORMESSAGE_JRUBY_BUG  = IS_JRUBY_PLATFORM && true
   ::CONNECT_EXCEL_JRUBY_BUG = IS_JRUBY_PLATFORM && true
   ::RANGES_JRUBY_BUG        = IS_JRUBY_PLATFORM && true
+  ::OLETYPE_JRUBY_BUG       = IS_JRUBY_PLATFORM && true
 
   # @private
   NetworkDrive = Struct.new(:drive_letter, :network_name) do
@@ -244,31 +283,31 @@ module General
     Pry.change_current_binding(current_object)
   end
 
-=begin  
-  def class2method
-    [{RobustExcelOle::Range => :Row},
-     {RobustExcelOle::Excel => :Hwnd},
-     {RobustExcelOle::Workbook => :FullName},
-     {RobustExcelOle::Worksheet => :UsedRange},
-     {RobustExcelOle::ListObject => :ListRows},
-     {RobustExcelOle::ListRow => :Creator}]
+=begin
+  def main_classes_and_recognising_methods
+    {RobustExcelOle::Range      => :Row,
+     RobustExcelOle::Worksheet  => :UsedRange,
+     RobustExcelOle::Workbook   => :FullName,
+     RobustExcelOle::Excel      => :Hwnd,
+     RobustExcelOle::ListObject => :ListRows,
+     RobustExcelOle::ListRow    => [:Creator, :no_method => :Row]}
   end
 =end
 
   # @private
-  def class2method
-    {RobustExcelOle::Range => :Row,
-     RobustExcelOle::Excel => :Hwnd,
-     RobustExcelOle::Workbook => :FullName,
-     RobustExcelOle::Worksheet => :UsedRange,
-     RobustExcelOle::ListObject => :ListRows,
-     RobustExcelOle::ListRow => :Creator}
+  def main_classes_ole_types_and_recognising_methods
+    [[RobustExcelOle::Range     , 'Range'       , :Row],
+     [RobustExcelOle::Worksheet , '_Worksheet'  , :UsedRange],
+     [RobustExcelOle::Workbook  , '_Workbook'   , :FullName],
+     [RobustExcelOle::Excel     , '_Application', :Hwnd],
+     [RobustExcelOle::ListObject, 'ListObject' , :ListRows],
+     [RobustExcelOle::ListRow   , 'ListRow'    , [:Creator, :no_method => :Row]]]
   end
 
   # @private
   # enable RobustExcelOle methods to Win32Ole objects
   def init_reo_for_win32ole
-    class2method.each_key do |classname|
+    main_classes_ole_types_and_recognising_methods.each do |classname, _ole_type, _recognising_method|
       meths = (classname.instance_methods(false) - WIN32OLE.instance_methods(false) - Object.methods - Enumerable.instance_methods(false) - [:Calculation=])
       meths.each do |inst_method|
         WIN32OLE.send(:define_method, inst_method) do |*args, &blk|  
@@ -284,7 +323,8 @@ module General
     nil
   end
 
-  module_function :absolute_path, :canonize, :normalize, :change_current_binding, :class2method, 
+  module_function :absolute_path, :canonize, :normalize, :change_current_binding, 
+                  :main_classes_ole_types_and_recognising_methods, 
                   :init_reo_for_win32ole, :hostnameshare2networkpath, :test
 
 end

@@ -72,37 +72,14 @@ module RobustExcelOle
     # @params [Variant] defined name or address
     # @returns [Variant] value (contents) of the range
     def [](name_or_address, address2 = :__not_provided)
-      range = range(name_or_address, address2) 
-      value = begin
-        if !::RANGES_JRUBY_BUG       
-          range.Value
-        else
-          values = range.value
-          (values.size==1 && values.first.size==1) ? values.first.first : values
-        end
-      rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException 
-        begin
-          range = self.Evaluate(name_obj.Name).to_reo
-          if !::RANGES_JRUBY_BUG
-            range.Value
-          else
-            values = range.value
-            (values.size==1 && values.first.size==1) ? values.first.first : values
-          end
-        rescue WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException 
-          raise RangeNotEvaluatable, "cannot evaluate range with name or address #{name_or_address.inspect}\n#{$!.message}"
-        end
-      end
-      if value == -2146828288 + RobustExcelOle::XlErrName
-        raise RangeNotEvaluatable, "cannot evaluate range with name or address #{name_or_address.inspect}\n#{$!.message}"
-      end
-      value
+      range(name_or_address, address2).value
     end
-    
+
     # sets the value of a range given its defined name or address, and the value
     # @params [Variant] defined name or address of the range
     # @params [Variant] value (contents) of the range
     # @returns [Variant] value (contents) of the range
+=begin
     def []=(name_or_address, value_or_address2, remaining_arg = :__not_provided) 
       if remaining_arg != :__not_provided
         name_or_address, value = [name_or_address, value_or_address2], remaining_arg
@@ -125,26 +102,20 @@ module RobustExcelOle
     rescue #WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
       raise RangeNotEvaluatable, "cannot assign value to range with name or address #{name_or_address.inspect}\n#{$!.message}"
     end
-
-=begin    
-    def []=(name_or_address, value) 
-      range = range(name_or_address)
-      if !::RANGES_JRUBY_BUG
-        range.Value = value
-      else
-        address_r1c1 = range.AddressLocal(true,true,XlR1C1)
-        row, col = address_tool.as_integer_ranges(address_r1c1)
-        row.each_with_index do |r,i|
-          col.each_with_index do |c,j|
-            range.Cells(i+1,j+1).Value = (value.respond_to?(:pop) ? value[i][j] : value )
-          end
-        end
-      end
-      value
-    rescue #WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
-      raise RangeNotEvaluatable, "cannot assign value to range with name or address #{name_or_address.inspect}\n#{$!.message}"
-    end
 =end
+
+    def []=(name_or_address, value_or_address2, remaining_arg = :__not_provided) 
+      if remaining_arg != :__not_provided
+        name_or_address, value = [name_or_address, value_or_address2], remaining_arg
+      else
+        value = value_or_address2
+      end
+      begin
+        range(name_or_address).value = value
+      rescue #WIN32OLERuntimeError, Java::OrgRacobCom::ComFailException
+        raise RangeNotEvaluatable, "cannot assign value to range with name or address #{name_or_address.inspect}\n#{$!.message}"
+      end
+    end
 
     # a range given a defined name or address
     # @params [Variant] defined name or address
@@ -155,10 +126,7 @@ module RobustExcelOle
         range = get_name_object(name).RefersToRange rescue nil
       end
       unless range
-        address = name_or_address
-        address = [address,address2] unless address2 == :__not_provided     
-        address = [address, 1..last_column] if address.is_a?(Integer)   
-        address = [address.first, 1..last_column] if address.is_a?(Array) && address.size == 1
+        address = normalize_address(name_or_address, address2)
         workbook.retain_saved do
           begin
             self.Names.Add('__dummy001',nil,true,nil,nil,nil,nil,nil,nil,'=' + address_tool.as_r1c1(address))          
@@ -172,8 +140,36 @@ module RobustExcelOle
       end
       range.to_reo
     end
+  
+  private
 
+    def normalize_address(address, address2)
+      address = [address,address2] unless address2 == :__not_provided     
+      address = if address.is_a?(Integer) || address.is_a?(Object::Range)
+        [address, 1..last_column]
+      elsif address.is_a?(Array)
+        if address.size == 1 
+          if address.first.is_a?(Integer) || address.first.is_a?(Object::Range)
+            [address.first, 1..last_column]
+          else 
+            address
+          end
+        else
+          if address.last.nil?
+            [address.first, 1..last_column]
+          elsif address.first.nil?
+            [1..last_row, address.last]
+          else
+            address
+          end
+        end
+      else
+        address
+      end
+    end
 
+  public
+    
     # returns the contents of a range with a locally defined name
     # evaluates the formula if the contents is a formula
     # if the name could not be found or the range or value could not be determined,
@@ -268,7 +264,8 @@ module RobustExcelOle
     def each
       if block_given?
         @ole_worksheet.UsedRange.Rows.lazy.each do |ole_row|
-          yield ole_row.Value.first
+          row_value = ole_row.Value
+          yield (row_value.nil? ? [] : ole_row.Value.first)  
         end
       else
         to_enum(:each).lazy

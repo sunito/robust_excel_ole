@@ -1,3 +1,29 @@
+= News
+
+== New Interface of #[]
+
+Worksheet#[] now returns a value instead of a range, e.g.
+
+  worksheet[1,1]
+  # => "foo"
+
+Transformation: To yield the range, write range() instead of (). For example,
+
+  worksheet.range(1,1)
+
+ or
+
+  worksheet.range([1,1])
+
+This returns the range of cell with address 1,1.
+
+With this new interface, we want to be compatible with the standard syntax of other known Excel libraries, e.g. +spreadsheet+ or +axlsx+.
+
+== Using own WIN32OLE objects
+
+If you use WIN32OLE objects and define your own methods, please use upper-case method names. 
+The reason is that we extend the class WIN32OLE such that RobustExcelOle methods can be applied to WIN32OLE objects, such the RobustExcelOle objects and their wrapped WIN32OLE objects are interchangeable. We want to develop a refinement such that the name space is not being desturbed.
+
 = RobustExcelOle
 
 RobustExcelOle helps controlling Excel. 
@@ -385,6 +411,9 @@ We can add and delete rows and columns, supplying optionally their name, the pos
   table.delete_empty_rows
   table.delete_empty_columns
 
+For more details about using and processing list objects see {README_listobjects}[https://github.com/Thomas008/robust_excel_ole/blob/master/docs/README_listobjects.rdoc]
+ 
+
 === More features
 
 1. The method +General.change_current_binding+ allows to change the value of self within the current binding, while preserving the local variables, without starting another repl. Assume, +object+ shall be the self, then you would put
@@ -402,7 +431,7 @@ or
 However, this command also starts another pry repl (with another binding). Moreover, local variables in the previous binding are forgotten.
 
 
-2. The class Win32Ole is being extended such that RobustExcelOle methods can be applied to Win32Ole objects. As mentioned above, the RobustExcelOle objects are wrapper of corresponding WIN32OLE objects. So the RobustExcelOle objects and their wrapped Win32Ole objects are interchangeable. One example would be
+2. The class Win32Ole is being extended such that RobustExcelOle methods can be applied to WIN32OLE objects. As mentioned above, the RobustExcelOle objects are wrapper of corresponding WIN32OLE objects. So the RobustExcelOle objects and their wrapped WIN32OLE objects are interchangeable. One example would be
 
   range.ole_range.copy([4,3])
 
@@ -411,6 +440,10 @@ Likewise it is possible to convert ("type-lift") Win32Ole objects into the corre
   using ToReoRefinement
 
   range = sheet.Names.Item("firstcell").to_reo
+
+=== Design issues
+
+We don't consider active worksheets or workbooks in our implementation, because this has been proven to be very error-prone.
 
 === Examples
 

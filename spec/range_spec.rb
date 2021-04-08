@@ -7,6 +7,7 @@ include General
 describe RobustExcelOle::Range do
 
   before(:all) do
+    
     excel = Excel.new(:reuse => true)
     open_books = excel == nil ? 0 : excel.Workbooks.Count
     puts "*** open books *** : #{open_books}" if open_books > 0
@@ -19,6 +20,7 @@ describe RobustExcelOle::Range do
     @sheet = @book.sheet(2)
     @range = RobustExcelOle::Range.new(@sheet.ole_worksheet.UsedRange.Rows(1))
     @range2 = @sheet.range([1..2,1..3])
+    @sheet1 = @book.sheet(1)
   end
 
   after do
@@ -89,6 +91,28 @@ describe RobustExcelOle::Range do
         cell.v.should == 'simple' if i == 2
         i += 1
       end
+    end
+
+  end
+
+  describe "#value" do
+   
+    it "should yield values" do
+      @sheet1.range([1..2,1..3]).value.should == [["foo", "workbook", "sheet1"], ["foo", nil, "foobaaa"]]
+      @sheet1.range([1,1..3]).value.should == [["foo", "workbook", "sheet1"]]
+      @sheet1.range([1..2,1]).value.should == [["foo"], ["foo"]]
+      @sheet1.range([1]).value.should == [["foo", "workbook", "sheet1"]]
+      @sheet1.range([1,2]).value.should == "workbook"
+    end
+
+  end
+
+  describe "#value=" do
+
+    it "should set value" do
+      @sheet1.range([1..2,1..3]).value.should == [["foo", "workbook", "sheet1"], ["foo", nil, "foobaaa"]]
+      @sheet1.range([1..2,1..3]).value = [["foo", nil, "foobaaa"], ["foo", "workbook", "sheet1"]] 
+      @sheet1.range([1..2,1..3]).value.should == [["foo", nil, "foobaaa"], ["foo", "workbook", "sheet1"]] 
     end
 
   end
@@ -204,7 +228,7 @@ describe RobustExcelOle::Range do
         @sheet1[2,3].should == "foobaaa"
         @sheet1[2,3] = "bar"
         @sheet1[2,3].should == "bar"
-        @sheet1.range([2,3]).should == "bar"
+        @sheet1.range([2,3]).Value.should == "bar"
       end
 
       it "should set value and return value of a rectangular range" do
@@ -227,7 +251,7 @@ describe RobustExcelOle::Range do
       @book1 = Workbook.open(@dir + '/workbook.xls')
       @sheet1 = @book1.sheet(1)
       @range1 = @sheet1.range([1..2,1..3])
-      @sheet1[1,1].Interior.ColorIndex = 4
+      @sheet1.range([1,1]).Interior.ColorIndex = 4
       @book2 = Workbook.open(@dir + '/different_workbook.xls')
       @sheet2 = @book2.sheet(2)
       @book3 = Workbook.open(@dir + '/another_workbook.xls', :force => {:excel => :new})
@@ -307,7 +331,7 @@ describe RobustExcelOle::Range do
       @book1 = Workbook.open(@dir + '/workbook.xls')
       @sheet1 = @book1.sheet(1)
       @range1 = @sheet1.range([1..2,1..3])
-      @sheet1[1,1].Interior.ColorIndex = 4
+      @sheet1.range([1,1]).Interior.ColorIndex = 4
       @book2 = Workbook.open(@dir + '/different_workbook.xls')
       @sheet2 = @book2.sheet(2)
       @book3 = Workbook.open(@dir + '/another_workbook.xls', :force => {:excel => :new})
